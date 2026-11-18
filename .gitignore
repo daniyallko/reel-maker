@@ -1,0 +1,42 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+
+# Builds
+.next/
+out/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Runtime media
+data/
+backend/data/
+backend/assets/sample/output/
+backend/assets/sample/derived/
+backend/assets/sample/audio/
+backend/assets/sample/titles/
+unslop/
+!backend/assets/sample/output/.gitkeep
+*.egg-info/
+*.tsbuildinfo
+*:Zone.Identifier
+
+# Tooling
+.superpowers/
+.playwright/
+test-results/
+playwright-report/
+coverage/
+
+# OS/editor
+.DS_Store
+*.swp
