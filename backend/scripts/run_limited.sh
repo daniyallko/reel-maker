@@ -10,7 +10,6 @@ export OPENCV_NUM_THREADS=1
 export TOKENIZERS_PARALLELISM=false
 export MALLOC_ARENA_MAX=2
 
-# Address-space cap includes native ONNX/OpenCV allocations. Default: 3 GiB.
-ulimit -v "${CUTLINE_MEMORY_KIB:-3145728}"
+# Physical RSS cap includes native ONNX/OpenCV/Chromium allocations. Default: 3 GiB.
 cd "$ROOT_DIR/backend"
-exec "$ROOT_DIR/.venv/bin/uvicorn" app.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+exec systemd-run --user --scope -p "MemoryMax=${CUTLINE_MEMORY_MAX:-3G}" "$ROOT_DIR/.venv/bin/uvicorn" app.main:app --host 0.0.0.0 --port "${PORT:-8000}"

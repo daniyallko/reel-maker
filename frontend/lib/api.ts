@@ -1,4 +1,4 @@
-import type { ProjectInput, ProjectSnapshot } from "./types";
+import type { ProjectInput, ProjectSnapshot, StudioProjectSnapshot } from "./types";
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, init);
@@ -32,6 +32,18 @@ export function createProject(input: ProjectInput): Promise<ProjectSnapshot> {
   return request<ProjectSnapshot>("/api/projects", { method: "POST", body: form });
 }
 
-export function getProject(id: string): Promise<ProjectSnapshot> {
-  return request<ProjectSnapshot>(`/api/projects/${id}`, { cache: "no-store" });
+export function getProject(id: string): Promise<StudioProjectSnapshot> {
+  return request<StudioProjectSnapshot>(`/api/studio/projects/${id}`, { cache: "no-store" });
+}
+
+export function createStudioProject(input: { url: string; style: string; voice: string }): Promise<StudioProjectSnapshot> {
+  return request<StudioProjectSnapshot>("/api/studio/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+}
+
+export function createStudioSample(): Promise<StudioProjectSnapshot> {
+  return request<StudioProjectSnapshot>("/api/studio/projects/sample", { method: "POST" });
 }

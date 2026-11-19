@@ -1,0 +1,73 @@
+{
+  "title": "Orbit Notes — Think in Public",
+  "trailer_url": "/media/sample-output/trailer.mp4",
+  "thumbnail_url": "/media/sample-output/visuals/thumbnail-03.png",
+  "preview_url": "/media/sample-output/audio/narration.wav",
+  "duration": 32.0,
+  "bpm": 128,
+  "scenes": [
+    {
+      "id": "hook",
+      "start": 0.0,
+      "end": 2.5,
+      "headline": "YOUR NEXT IDEA IS ALREADY IN ORBIT",
+      "narration": "Your next big idea is already hiding in your notes.",
+      "visual_prompt": "Kinetic 3D website slab slam with the Orbit Notes brand.",
+      "source_refs": [
+        0
+      ]
+    },
+    {
+      "id": "problem",
+      "start": 2.5,
+      "end": 12.0,
+      "headline": "SCATTERED THOUGHTS GET LOST",
+      "narration": "Most notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.",
+      "visual_prompt": "Constellation of connected ideas resolving from scattered notes.",
+      "source_refs": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "system",
+      "start": 12.0,
+      "end": 25.0,
+      "headline": "LOCAL FIRST. LINKED BY DESIGN.",
+      "narration": "The constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.",
+      "visual_prompt": "Real Orbit Notes interface with glowing graph connections and privacy callouts.",
+      "source_refs": [
+        0,
+        1
+      ]
+    },
+    {
+      "id": "takeaway",
+      "start": 25.0,
+      "end": 32.0,
+      "headline": "THINK IN PUBLIC. KEEP IT YOURS.",
+      "narration": "Seven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.",
+      "visual_prompt": "Monday review card resolving into the Orbit Notes cover thumbnail.",
+      "source_refs": [
+        0
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://example.com/orbit",
+      "title": "Orbit Notes product site",
+      "claim": "Local-first notes, constellation links, offline search, open exports, and Monday review"
+    },
+    {
+      "url": "https://example.com/orbit-review",
+      "title": "Orbit Notes field review",
+      "claim": "A seven-minute weekly review reconnects recent ideas"
+    }
+  ],
+  "script": "YOUR NEXT IDEA IS ALREADY IN ORBIT\nYour next big idea is already hiding in your notes.\n\nSCATTERED THOUGHTS GET LOST\nMost notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.\n\nLOCAL FIRST. LINKED BY DESIGN.\nThe constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.\n\nTHINK IN PUBLIC. KEEP IT YOURS.\nSeven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.",
+  "source_url": "file:///home/daniyallko/reel-maker/backend/assets/link2reel/sample-site/index.html",
+  "style": "launch",
+  "voice": "Fenrir",
+  "critique_scores": {}
+}

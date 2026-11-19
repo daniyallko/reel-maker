@@ -12,11 +12,11 @@ export function CinematicFooter() {
         <div>
           <div className="mb-8 flex items-center gap-3 text-white/70">
             <CutlineLogo className="size-[18px]" />
-            <span className="text-[15px] tracking-tight">CUTLINE</span>
+            <span className="text-[15px] tracking-tight">LINK2REEL</span>
           </div>
-          <p className="max-w-sm text-sm leading-relaxed text-white/45">The next evolution of the group-chat recap. Built for friends who refuse to let a chaotic weekend disappear into the camera roll.</p>
+          <p className="max-w-sm text-sm leading-relaxed text-white/45">The next evolution of the URL-to-video studio. Built for stories that deserve more than a static screenshot and a generic slideshow.</p>
         </div>
-        <p className="mt-12 text-xs text-white/45">© 2026 CUTLINE Studio. All rights reserved.</p>
+        <p className="mt-12 text-xs text-white/45">© 2026 LINK2REEL Studio. All rights reserved.</p>
       </div>
     </footer>
   );

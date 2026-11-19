@@ -1,46 +1,33 @@
-# CUTLINE Neon Design System
+# LINK2REEL Glyph Design System
 
-**Direction:** SynapseX-style neural cinema applied to CUTLINE's trailer-production workflow. Full-viewport video, black/white monospace type, glass navigation capsules, scramble reveals, and spring motion frame the three product views without changing their function.
+**Direction:** A procedural glyph-animal new tab for URL-to-motion production. Near-black grid, keyboard-drawn animals, frosted liquid glass, and a focused source composer.
 
 ## Foundations
 
-- **Canvas:** `#000000`.
-- **Text:** `#FFFFFF`; secondary `rgba(255,255,255,.65)`; metadata `rgba(255,255,255,.45)` or stronger.
-- **Surfaces:** black at 56–70% over video; raised surfaces white at 8–15%; hairlines white at 12%.
-- **Primary action:** white fill with black text. Secondary actions use white/8 glass with white/12 borders.
-- **Watermark only:** `radial-gradient(circle, rgba(142,127,148,0) 0%, #8E7F94 70%)` with transparent text fill.
-- **Primary type:** Space Mono 400/700, normal and italic. All UI, headings, labels, and telemetry use it.
-- **Watermark type only:** Anton SC, uppercase, `clamp(120px, 30vw, 521px)`, -4px tracking.
-- **Shape:** 10px controls, 14px panels and glass pills, full-round primary navigation action. Touch targets remain at least 44×44px.
+- Canvas `#06070c`; text `#E8EBF7`; soft text `rgba(232,235,247,.72)`; muted text `rgba(232,235,247,.4)`.
+- Glass: 135° white tint gradient, 1px white edge, inset rim, dark shadow, and Chromium liquid displacement. Non-Chromium uses plain blur.
+- Geist for UI, Geist Mono 600 for canvas glyphs and tweak values. Both fonts are embedded as base64 WOFF2 in `frontend/app/glyph-fonts.css`.
+- Seven species: Moth, Rabbit, Sea turtle, Squid, Owl, Flying fish, Eagle. Their dot colors, direction, scale, detail, and trail colors come from `frontend/lib/glyph-animals.ts`.
+- Composer and tweak controls use white primary actions, pill secondary actions, and soft text rather than neon decoration.
 
-## Video and motion
+## Views
 
-- Director's Slate hero uses the supplied CloudFront hero video, paused on load. Horizontal viewport pointer movement scrubs time at sensitivity 0.8, with `seeked`-chained requests and no-op seek suppression.
-- Screening Room, Premiere, cast, and footer use their assigned videos autoplayed muted and looped. Every video has an accessible pause/play control, pauses offscreen, and remains paused under reduced motion.
-- ScrambleIn reveals at 0.5 characters per 25ms after section-specific delays. ScrambleText reveals at four frames per character on hover and resets immediately on exit.
-- The hamburger and expanding menu use spring stiffness 300–350 and damping 20–28.
-- Screening Room header uses scroll progress through a spring, `rotateX(24deg)`, vertical travel, and `translateZ(15px)`.
-- All preference logic uses a hydration-safe media-query hook; reduced motion presents final content without parallax, scramble, autoplay, or spring travel.
+### New tab
 
-## Three product views
-
-### Director's Slate
-
-Full-viewport mouse-scrub hero with dot grid and CUTLINE watermark. Asymmetric `Weekend / In motion` and `One / Trailer` titles sit above the media workflow. Below: media dump, voice/story, cast, genre, adaptive pipeline features, three-layer architecture, and video footer.
+Seven species pills sit above a centered avatar/greeting and URL composer below the hero. Composer contains the source URL, sample URL pills, sample demo, style, and voice controls. Tweaks is top-right on desktop and a bottom sheet on mobile. Clicking empty canvas space startles animals and leaves a trail burst.
 
 ### Screening Room
 
-Cinematic video backdrop, top black fade, 3D header, three production metrics, contact sheet, and agent telemetry. Keeper/rejected state remains textual and icon-based, not color-only.
+The same procedural canvas and avatar sit behind source assets, live agent telemetry, and narration preview. Source URL remains visible beside progress.
 
-### Premiere Press Kit
+### Premiere
 
-Video-backed title and metrics, vertical trailer player, audio-reactive EDL filmstrip, tilting poster, cast stack, sharing, downloads, and video footer. Mobile keeps a fixed bottom action bar with bottom content padding.
+The procedural canvas sits behind the vertical player, scene timeline, generated cover, script, and cited sources. The generated poster is an output asset, not a substitute for the procedural animals.
 
-## Responsive and accessibility rules
+## Responsive and motion
 
-- Mobile gutter 16px; desktop 24–32px; maximum workspace 1440px.
-- Fixed headers and bottom bars never cover focused content; scroll targets use 96px offsets and mobile bottom padding.
-- Body text stays at least 16px on mobile inputs; metadata stays at least 11px.
-- Video controls, cast controls, modals, uploads, and navigation work without gestures or hover.
-- No unlayered global padding reset: Tailwind v4 spacing utilities must remain effective.
-- No horizontal page overflow at 375px. Reduced-motion and server-rendered markup agree until hydration completes.
+- Pills wrap on small screens, never sideways-scroll. Thumb follows offsetLeft and offsetTop.
+- Composer moves below the hero at every breakpoint. URL, style, voice, and sample actions stay together.
+- Reduced motion draws one settled still and disables tap reactions.
+- Background videos are removed from these views. No external image assets are used for the animals.
+- Memory caps and existing studio API/SSE behavior remain unchanged.

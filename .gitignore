@@ -24,6 +24,8 @@ backend/assets/sample/output/
 backend/assets/sample/derived/
 backend/assets/sample/audio/
 backend/assets/sample/titles/
+backend/assets/link2reel/sample-output/frames/
+backend/assets/link2reel/sample-output/audio/scene-*
 unslop/
 !backend/assets/sample/output/.gitkeep
 *.egg-info/

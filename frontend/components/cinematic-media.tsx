@@ -87,15 +87,19 @@ export function VideoBackground({ ref, src, autoPlay = true, className = "", onP
       if (reducedMotion) setPlaying(false);
       return;
     }
-    void element.play().catch(() => setPlaying(false));
+    const playback = element.play();
+    if (playback) void playback.catch(() => setPlaying(false));
   }, [playing, reducedMotion]);
 
   useEffect(() => {
     const element = localVideo.current;
-    if (!element || !autoPlay) return;
+    if (!element || !autoPlay || typeof IntersectionObserver === "undefined") return;
     const observer = new IntersectionObserver(([entry]) => {
       if (!entry.isIntersecting) element.pause();
-      else if (playing && !reducedMotion) void element.play().catch(() => undefined);
+      else if (playing && !reducedMotion) {
+        const playback = element.play();
+        if (playback) void playback.catch(() => undefined);
+      }
     }, { threshold: 0.05 });
     observer.observe(element);
     return () => observer.disconnect();

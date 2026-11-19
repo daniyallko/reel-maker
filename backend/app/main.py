@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from app.api import router, settings
+from app.studio.api import router as studio_router
 
 app = FastAPI(title="CUTLINE", version="0.1.0")
 app.add_middleware(
@@ -14,6 +15,7 @@ app.add_middleware(
     expose_headers=["Content-Length", "Content-Range"],
 )
 app.include_router(router)
+app.include_router(studio_router)
 app.mount("/media", StaticFiles(directory=settings.data_dir), name="media")
 
 

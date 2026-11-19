@@ -14,7 +14,7 @@ interface AppHeaderProps {
   navItems?: NavItem[];
 }
 
-export function AppHeader({ projectId, status = "EDITING BAY 01", navItems = [{ label: "Media", target: "media" }, { label: "Cast", target: "cast" }] }: AppHeaderProps) {
+export function AppHeader({ projectId, status = "MOTION BAY 01", navItems = [{ label: "Source", target: "source-url" }, { label: "Voices", target: "voice" }] }: AppHeaderProps) {
   const [open, setOpen] = useState(false);
   const [hovered, setHovered] = useState("");
   const [entranceComplete, setEntranceComplete] = useState(false);
@@ -46,9 +46,9 @@ export function AppHeader({ projectId, status = "EDITING BAY 01", navItems = [{ 
             transition={{ type: "spring", stiffness: 350, damping: 28 }}
           >
             <motion.div whileHover={reducedMotion ? undefined : { scale: 1.02 }} whileTap={reducedMotion ? undefined : { scale: 0.98 }}>
-              <Link href="/" className="flex h-9 items-center gap-2 px-3 sm:h-12 sm:px-5" aria-label="CUTLINE home">
+              <Link href="/" className="flex h-9 items-center gap-2 px-3 sm:h-12 sm:px-5" aria-label="LINK2REEL home">
                 <CutlineLogo className="size-4 text-white sm:size-[18px]" />
-                <span className="whitespace-nowrap text-[13px] tracking-tight text-white sm:text-base">CUTLINE</span>
+                <span className="whitespace-nowrap text-[13px] tracking-tight text-white sm:text-base">LINK2REEL</span>
               </Link>
             </motion.div>
           </motion.div>
@@ -102,7 +102,7 @@ export function AppHeader({ projectId, status = "EDITING BAY 01", navItems = [{ 
           <span className="mono hidden text-[11px] text-white/45 lg:block">{projectId ? `REEL ${projectId.toUpperCase()}` : status}</span>
           <motion.div whileHover={reducedMotion ? undefined : { scale: 1.03 }} whileTap={reducedMotion ? undefined : { scale: 0.97 }}>
             <Link
-              href="/#media"
+              href="/#source-url"
               className="flex h-9 items-center rounded-full bg-white px-4 text-[13px] text-black sm:h-12 sm:px-6 sm:text-sm"
               onMouseEnter={() => setHovered("create")}
               onMouseLeave={() => setHovered("")}

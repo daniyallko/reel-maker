@@ -66,7 +66,7 @@ export interface PressKitOutput {
   beat_markers: number[];
 }
 
-export interface AgentStatusEvent {
+export interface AgentStatusEvent<TOutput = PressKitOutput, TAsset = CuratedAsset> {
   id: number;
   project_id: string;
   agent: string;
@@ -74,9 +74,9 @@ export interface AgentStatusEvent {
   message: string;
   progress: number;
   timestamp: number;
-  assets: CuratedAsset[] | null;
+  assets: TAsset[] | null;
   payload?: {
-    output?: PressKitOutput;
+    output?: TOutput;
     edl?: TrailerEDL;
     vibe?: VibeProfile;
     [key: string]: unknown;
@@ -91,6 +91,59 @@ export interface ProjectSnapshot {
   assets: CuratedAsset[];
   events: AgentStatusEvent[];
   output: PressKitOutput | null;
+  error: string | null;
+}
+
+export interface StudioAsset {
+  id: string;
+  kind: "screenshot" | "image" | "video" | "art" | "thumbnail" | "audio" | "critique";
+  label: string;
+  url: string;
+  mime_type: string;
+}
+
+export interface StoryScene {
+  id: string;
+  start: number;
+  end: number;
+  headline: string;
+  narration: string;
+  visual_prompt: string;
+  source_refs: number[];
+}
+
+export interface SourceCitation {
+  url: string;
+  title: string;
+  claim: string;
+}
+
+export interface StudioOutput {
+  title: string;
+  trailer_url: string;
+  thumbnail_url: string;
+  preview_url: string;
+  duration: number;
+  bpm: number;
+  scenes: StoryScene[];
+  sources: SourceCitation[];
+  script: string;
+  source_url: string | null;
+  style: string;
+  voice: string;
+  critique_scores?: Record<string, number>;
+}
+
+export interface StudioProjectSnapshot {
+  id: string;
+  status: ProjectStatus;
+  source_url: string;
+  style: string;
+  voice: string;
+  created_at: number;
+  assets: StudioAsset[];
+  events: AgentStatusEvent<StudioOutput, StudioAsset>[];
+  output: StudioOutput | null;
   error: string | null;
 }
 

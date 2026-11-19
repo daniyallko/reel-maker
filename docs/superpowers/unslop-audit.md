@@ -1,26 +1,25 @@
-# CUTLINE unslop audit — Neon redesign
+# LINK2REEL unslop audit — Premiere
 
 Date: 2026-11-18
 
 ## Direction
 
-- **Product:** CUTLINE turns a friend group's trip evidence into a trailer, poster, and cast press kit.
-- **Character:** Neural, tactile, exact.
-- **World:** Full-viewport cinema, contact sheets, editing telemetry, and theatrical press kits.
-- **Moments:** The supplied cinematic videos and generated poster/trailer carry the visual richness.
-- **Signature:** Space Mono timecode, scramble reveals, and the four-fold CUTLINE mark.
+- **Product:** A sourced URL becomes a vertical motion video.
+- **Character:** Exact, cinematic, quiet.
+- **World:** Contact sheets, director stills, editing monitors, and theatrical press kits.
+- **Moments:** The final player and generated cover carry the visual richness; controls stay neutral.
+- **Signature:** Geist Mono scene timecodes and the four-fold LINK2REEL mark.
 
-## Inventory and fixes
+## Inventory
 
-- **Spacing:** The prompt's unlayered `* { padding: 0 }` overrode every Tailwind v4 utility. Removed the padding reset; restored all intended gutters, panel padding, and flex bounds.
-- **Mobile overlap:** Increased hero bottom space and added page-level bottom padding so fixed action bars do not cover content or the footer.
-- **Contrast:** Raised footer copyright and architecture-layer metadata to white/45 or stronger.
-- **Controls:** Moved background pause/play controls below the fixed navbar after they overlapped Cast navigation.
-- **Motion:** Fixed no-op seek locking in the mouse-scrub queue; viewport pointer tracking now works over hero content. Reduced-motion behavior uses a hydration-safe media-query hook.
-- **Typography:** Space Mono is used everywhere except the Anton SC watermark. No generic display sans or competing type families remain.
-- **Visuals:** The new prompt explicitly authorizes the neon watermark and glass surfaces. No additional gradients, blobs, emoji icons, or decorative AI imagery were introduced.
-- **Copy:** Product language stays specific to camera rolls, agents, dailies, and theatrical output.
+- **Spacing:** 4/8px rhythm, aligned player metadata, consistent 14–16px panels, and full-width script/source workspace.
+- **Color:** Near-black neutral ramp with white primary actions. No hue gradients, glows, colored shadows, or neon borders.
+- **Icons:** Phosphor icons only; no emoji or decorative glyphs outside the procedural canvas.
+- **Type:** Geist UI, Geist Mono metadata. Display title wraps at any width; numbers use tabular figures.
+- **Layout:** Player first, poster and downloads second, script and sources full-width below. Mobile stacks without horizontal overflow.
+- **Motion:** Poster tilt and modal inspection have keyboard equivalents; scene seeking and native video controls work without gestures.
+- **Copy:** Specific source, runtime, scene, and citation language. No placeholder cards or generic AI claims.
 
-## Verification
+## Result
 
-The browser suite was run after the spacing fixes and passed mouse scrubbing, navigation, 375px overflow checks, reduced motion, sample SSE, playback, cast controls, modals, timeline seeking, downloads, and sharing. Final screenshots are stored in `frontend/test-results/`.
+No remaining slop. No further visual changes required. The final page reads as a focused premiere workspace rather than a template.

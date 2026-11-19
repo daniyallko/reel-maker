@@ -1,6 +1,6 @@
 from enum import StrEnum
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -124,7 +124,7 @@ class AgentStatusEvent(BaseModel):
     message: str
     progress: float = Field(ge=0, le=100)
     timestamp: float
-    assets: list[CuratedAsset] | None = None
+    assets: list[Any] | None = None
     payload: dict | None = None
 
 

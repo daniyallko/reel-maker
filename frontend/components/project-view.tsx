@@ -3,8 +3,8 @@
 import { AnimatePresence, motion } from "motion/react";
 import { useMotionPreference as useReducedMotion } from "@/lib/use-motion-preference";
 import { AppHeader } from "./app-header";
-import { Premiere } from "./premiere";
-import { ScreeningRoom } from "./screening-room";
+import { StudioPremiere } from "./studio-premiere";
+import { StudioScreening } from "./studio-screening";
 import { useProjectEvents } from "@/lib/use-project-events";
 
 export function ProjectView({ id }: { id: string }) {
@@ -17,22 +17,21 @@ export function ProjectView({ id }: { id: string }) {
       <AppHeader
         projectId={id}
         status={status}
-        navItems={snapshot?.output ? [{ label: "Press kit", target: "press-kit" }, { label: "Cast", target: "cast" }] : [{ label: "Agents", target: "agents" }, { label: "Dailies", target: "dailies" }]}
+        navItems={snapshot?.output ? [{ label: "Script", target: "script-title" }, { label: "Scenes", target: "scene-timeline" }] : [{ label: "Assets", target: "source-assets" }, { label: "Agents", target: "agent-telemetry" }]}
       />
       <AnimatePresence mode="wait">
         <motion.main
           id="main-content"
           key={snapshot?.output ? "premiere" : "screening"}
-          layoutId="workspace"
           initial={reduceMotion ? false : { opacity: 0, y: 8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={reduceMotion ? undefined : { opacity: 0, y: -6 }}
           transition={{ duration: reduceMotion ? 0 : 0.32 }}
         >
           {snapshot?.output && snapshot.status === "complete" ? (
-            <Premiere project={snapshot} />
+            <StudioPremiere output={snapshot.output} sourceUrl={snapshot.source_url} />
           ) : (
-            <ScreeningRoom project={snapshot} error={error} connection={connection} onRetry={retry} />
+            <StudioScreening project={snapshot} error={error} connection={connection} onRetry={retry} />
           )}
         </motion.main>
       </AnimatePresence>
