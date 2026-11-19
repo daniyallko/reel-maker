@@ -4,6 +4,7 @@ import { ArrowClockwise, Check, Circle, CircleNotch, XCircle } from "@phosphor-i
 import { useState } from "react";
 import type { StudioProjectSnapshot } from "@/lib/types";
 import type { ConnectionState } from "@/lib/use-project-events";
+import { useMotionPreference as useReducedMotion } from "@/lib/use-motion-preference";
 import { DEFAULT_SETTINGS, type GlyphSettings, type SpeciesKey } from "@/lib/glyph-animals";
 import { GlyphCanvas } from "./glyph-canvas";
 import { GlyphTweaks } from "./glyph-tweaks";
@@ -24,6 +25,7 @@ const AGENTS = [
 export function StudioScreening({ project, connection, onRetry, error }: { project: StudioProjectSnapshot | null; connection: ConnectionState; onRetry: () => void; error?: string }) {
   const [species, setSpecies] = useState<SpeciesKey>("moth");
   const [settings, setSettings] = useState<GlyphSettings>(DEFAULT_SETTINGS);
+  const reduceMotion = Boolean(useReducedMotion());
   const events = project?.events ?? [];
   const latest = events.at(-1);
   const progress = latest?.progress ?? 0;
@@ -51,14 +53,15 @@ export function StudioScreening({ project, connection, onRetry, error }: { proje
           <p className="sr-only" role="status" aria-live="polite">{latest?.message ?? "Connecting to the studio"}</p>
         </div>
 
-        {project?.error || error ? (
-          <section className="studio-panel mx-auto max-w-2xl p-6 text-center">
-            <XCircle size={30} className="mx-auto mb-4 text-white" aria-hidden="true" />
-            <h2 className="text-2xl">The reel jammed.</h2>
-            <p className="mt-3 text-sm leading-6 text-white/55">{project?.error || error}</p>
-            <Button className="mt-5" onClick={onRetry}><ArrowClockwise size={17} aria-hidden="true" /> Reconnect</Button>
-          </section>
-        ) : (
+        <>
+          {project?.error || error ? (
+            <section className="studio-panel mx-auto mb-6 max-w-2xl p-6 text-center" role="alert">
+              <XCircle size={30} className="mx-auto mb-4 text-white" aria-hidden="true" />
+              <h2 className="text-2xl">The reel jammed.</h2>
+              <p className="mt-3 text-sm leading-6 text-white/55">{project?.error || error}</p>
+              <Button className="mt-5" onClick={onRetry}><ArrowClockwise size={17} aria-hidden="true" /> Reconnect</Button>
+            </section>
+          ) : null}
           <div className="grid items-start gap-6 lg:grid-cols-12">
             <section id="source-assets" className="studio-panel p-4 sm:p-5 lg:col-span-8" aria-label="Source asset contact sheet">
               <div className="mb-4 flex items-end justify-between gap-3">
@@ -95,24 +98,46 @@ export function StudioScreening({ project, connection, onRetry, error }: { proje
               <ol className="divide-y divide-white/10 border-y border-white/10">
                 {AGENTS.map(([id, label], index) => {
                   const event = [...events].reverse().find((item) => item.agent === id);
-                  const status = event?.status ?? "pending";
+                  const status = project?.status === "failed" && event?.status === "running" ? "failed" : event?.status ?? "pending";
                   return (
                     <li key={id} className="flex min-h-16 items-start gap-3 py-3">
                       <span className="mono w-5 pt-0.5 text-[11px] text-white/40">{String(index + 1).padStart(2, "0")}</span>
-                      <span className="pt-0.5" aria-hidden="true">
-                        {status === "running" ? <CircleNotch size={16} className="animate-spin" /> : status === "complete" ? <Check size={16} /> : status === "failed" ? <XCircle size={16} /> : <Circle size={16} className="text-white/30" />}
+                      <span className="pt-0.5" role="img" aria-label={`${label} ${status === "running" ? "executing" : status}`}>
+                        {status === "running" ? <CircleNotch size={16} className={reduceMotion ? "text-white" : "animate-spin text-white"} /> : status === "complete" ? <Check size={16} /> : status === "failed" ? <XCircle size={16} /> : <Circle size={16} className="text-white/30" />}
                       </span>
                       <div className="min-w-0 flex-1">
                         <p className={`text-sm ${status === "pending" ? "text-white/40" : "text-white"}`}>{label}</p>
                         <p className="mt-0.5 text-xs leading-5 text-white/45">{event?.message ?? "Waiting for source data"}</p>
+                        <p className="mono mt-1 text-[10px] text-white/35">{event ? `EVENT #${String(event.id).padStart(6, "0")} / ${status.toUpperCase()} / ${event.progress}%` : "WAITING FOR BACKEND RESPONSE"}</p>
                       </div>
                     </li>
                   );
                 })}
               </ol>
             </aside>
+            <section className="studio-panel overflow-hidden lg:col-span-12" aria-labelledby="backend-stream-title">
+              <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">
+                <div>
+                  <p className="mono text-[11px] text-white/55">BACKEND RESPONSE STREAM</p>
+                  <h2 id="backend-stream-title" className="mt-1 text-xl">Live execution log</h2>
+                </div>
+                <p className="mono text-[11px] text-white/55">SSE / {connection.toUpperCase()} / {events.length} EVENTS</p>
+              </div>
+              <div role="log" aria-label="Backend response stream" aria-live="polite" aria-relevant="additions text" className="mono max-h-80 overflow-y-auto bg-black/50 px-4 py-2 text-[11px] sm:px-5">
+                {events.length ? events.slice(-12).map((event) => {
+                  const timestamp = new Date(event.timestamp * 1000).toISOString();
+                  return (
+                    <article key={event.id} className="grid gap-2 border-b border-white/10 py-3 last:border-b-0 md:grid-cols-[220px_1fr_auto] md:items-start">
+                      <p className="text-white/45">#{String(event.id).padStart(6, "0")} / {event.agent}</p>
+                      <p className="leading-5 text-white/85">{event.message}</p>
+                      <p className="text-white/45 md:text-right">{event.status.toUpperCase()} / {event.progress}% / <time dateTime={timestamp}>{timestamp.slice(11, 19)} UTC</time></p>
+                    </article>
+                  );
+                }) : <p className="py-4 text-white/45">Awaiting backend response…</p>}
+              </div>
+            </section>
           </div>
-        )}
+        </>
       </div>
     </div>
   );
