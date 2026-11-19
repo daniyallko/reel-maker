@@ -1,8 +1,9 @@
 import asyncio
+import mimetypes
 import tempfile
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw
 from google import genai
 from google.genai import types
 
@@ -48,15 +49,80 @@ def mock_storyboard(style: str, voice: str) -> Storyboard:
     )
 
 
+def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyboard:
+    return Storyboard(
+        title="Mohd Daniyal — Production AI in Motion",
+        style=style,
+        voice=voice,
+        duration=32,
+        bpm=128,
+        scenes=[
+            StoryScene(
+                id="hook",
+                start=0,
+                end=2.5,
+                headline="PRODUCTION AI. REAL IMPACT.",
+                narration="Mohd Daniyal builds production AI systems that turn complex research into reliable products.",
+                visual_prompt="A dramatic close crop of the real Mohd Daniyal portfolio interface with no added text.",
+                source_refs=[0, 1],
+            ),
+            StoryScene(
+                id="scale",
+                start=2.5,
+                end=12,
+                headline="AI AT PRODUCTION SCALE",
+                narration="As a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.",
+                visual_prompt="Real AI BotKit and portfolio product interfaces with layered depth and no invented metrics or text.",
+                source_refs=[0, 1],
+            ),
+            StoryScene(
+                id="engineering",
+                start=12,
+                end=25,
+                headline="AGENTS. RAG. REAL-TIME VOICE.",
+                narration="His work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.",
+                visual_prompt="Real portfolio engineering projects, voice-agent telemetry, and product UI details with no fake dashboards or added copy.",
+                source_refs=[0, 1],
+            ),
+            StoryScene(
+                id="takeaway",
+                start=25,
+                end=32,
+                headline="BUILD WHAT MOVES AI FORWARD",
+                narration="Mohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
+                visual_prompt="The real Mohd Daniyal portfolio closing view and brand imagery with calm negative space for the separate headline layer.",
+                source_refs=[0],
+            ),
+        ],
+        sources=[
+            SourceCitation(url="https://daniyal.pro", title="Mohd Daniyal portfolio", claim="Production AI engineering, AI BotKit, voice systems, and selected project evidence"),
+            SourceCitation(url="inline://portfolio-cv", title="Mohd Daniyal professional CV", claim="1,000+ websites, 100,000+ users, sub-500ms first audio, and 99.9% platform uptime"),
+        ],
+        speech_style="Cinematic, precise, third-person engineering portrait with confident pacing and clean pauses",
+    )
+
+
 def fallback_visuals(storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
     output = project_dir / "visuals"
     output.mkdir(parents=True, exist_ok=True)
-    source_paths = harvest.screenshots if harvest and harvest.screenshots else [Path(__file__).resolve().parents[2] / "assets" / "link2reel" / "sample-site" / "orbit-hero.jpg"]
+    if harvest:
+        source_paths = [*harvest.image_paths, *harvest.screenshots]
+    else:
+        source_paths = [Path(__file__).resolve().parents[2] / "assets" / "link2reel" / "sample-site" / "orbit-hero.jpg"]
     assets: list[StudioAsset] = []
     for index, kind in enumerate(("art", "art", "thumbnail"), start=1):
-        source_path = source_paths[(index - 1) % len(source_paths)]
-        image = Image.open(source_path).convert("RGB")
-        canvas = cover(image, (1080, 1920), focus_y=0.25 + index * 0.12).convert("RGBA")
+        if source_paths:
+            source_path = source_paths[(index - 1) % len(source_paths)]
+            image = Image.open(source_path).convert("RGB")
+            canvas = cover(image, (1080, 1920), focus_y=0.25 + index * 0.12).convert("RGBA")
+        else:
+            canvas = Image.new("RGBA", (1080, 1920), (5, 6, 10, 255))
+            draw = ImageDraw.Draw(canvas)
+            accent = (94, 106, 210, 180)
+            for line in range(7):
+                y = 260 + line * 190 + index * 36
+                draw.line((72, y, 1008 - line * 72, y - 120), fill=accent, width=3)
+            draw.rectangle((72 + index * 36, 300, 620 + index * 36, 980), outline=(255, 255, 255, 45), width=2)
         shade = Image.new("RGBA", canvas.size, (4, 6, 14, 30))
         canvas = Image.alpha_composite(canvas, shade)
         path = output / f"{kind}-{index:02d}.png"
@@ -65,18 +131,31 @@ def fallback_visuals(storyboard: Storyboard, harvest: HarvestResult | None, proj
     return assets
 
 
+def _fallback_headline(text: str, fallback: str) -> str:
+    cleaned = (text.strip() or fallback).upper()
+    if len(cleaned) <= 42:
+        return cleaned
+    return cleaned[:42].rsplit(" ", 1)[0]
+
+
+def _fallback_sentence(text: str) -> str:
+    cleaned = text.strip()
+    return cleaned if cleaned.endswith((".", "!", "?")) else f"{cleaned}."
+
+
 def fallback_storyboard(harvest: HarvestResult, sources: list[SourceCitation], style: str, voice: str) -> Storyboard:
     title = harvest.title or "Source Story"
     sentences = [part.strip() for part in harvest.dom_copy.replace("\n", " ").split(".") if part.strip()]
-    first = sentences[0] if sentences else f"An inside look at {title}"
+    first = sentences[0] if sentences else title
     second = sentences[1] if len(sentences) > 1 else first
     third = sentences[2] if len(sentences) > 2 else second
+    fourth = sentences[3] if len(sentences) > 3 else third
     citations = sources or [SourceCitation(url=harvest.source_url, title=title, claim="Primary source supplied by the user")]
     scenes = [
-        StoryScene(id="hook", start=0, end=2.5, headline=title.upper(), narration=f"This is {title}. {first}.", visual_prompt=f"Real {title} website slab and brand colors", source_refs=[0]),
-        StoryScene(id="problem", start=2.5, end=12, headline="THE STORY BEHIND THE PAGE", narration=f"Behind the landing page is a real problem. {second}.", visual_prompt=f"Editorial visual metaphor for {title}", source_refs=[0]),
-        StoryScene(id="system", start=12, end=25, headline="HOW IT WORKS", narration=f"Here is how it works. {third}.", visual_prompt=f"Real {title} interface with feature callouts", source_refs=[0]),
-        StoryScene(id="takeaway", start=25, end=32, headline="THE TAKEAWAY", narration=f"The takeaway is simple. {title} is worth a closer look.", visual_prompt=f"Cover thumbnail for {title}", source_refs=[0]),
+        StoryScene(id="hook", start=0, end=2.5, headline=_fallback_headline(first, title), narration=_fallback_sentence(first), visual_prompt=f"Real source imagery for {title}", source_refs=[0]),
+        StoryScene(id="problem", start=2.5, end=12, headline=_fallback_headline(second, "THE CHALLENGE"), narration=_fallback_sentence(second), visual_prompt=f"Editorial source imagery for {title}", source_refs=[0]),
+        StoryScene(id="system", start=12, end=25, headline=_fallback_headline(third, "HOW IT WORKS"), narration=_fallback_sentence(third), visual_prompt=f"Real source interface or supplied images for {title}", source_refs=[0]),
+        StoryScene(id="takeaway", start=25, end=32, headline=_fallback_headline(fourth, "WHY IT MATTERS"), narration=_fallback_sentence(fourth), visual_prompt=f"Cover artwork for {title}", source_refs=[0]),
     ]
     return Storyboard(
         title=title,
@@ -104,7 +183,7 @@ Every scene must cite its supporting evidence in source_refs. If research has no
 external result, tell a primary-source product overview instead of inventing a problem.
 Return title, style, voice, duration 32, bpm 128, scenes with id/start/end/headline/
 narration/visual_prompt/source_refs, sources, and speech_style.
-Primary page: {harvest.title}\n{harvest.dom_copy}\nPalette: {harvest.palette}\nFonts: {harvest.fonts}
+Primary source ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}\nPalette: {harvest.palette}\nFonts: {harvest.fonts}
 Citations: {[source.model_dump() for source in sources]}
 Video style: {style}. Voice: {voice}.
 """
@@ -151,12 +230,16 @@ class GeminiStudioProvider:
         prompt = build_storyboard_prompt(harvest, sources, style, voice)
         config = self._core_config()
         config.response_schema = Storyboard
+        contents: list = [prompt]
+        for image_path in harvest.image_paths[:2]:
+            mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
+            contents.append(types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type))
         for model in (CORE_MODEL, FALLBACK_MODEL):
             try:
                 response = await asyncio.wait_for(asyncio.to_thread(
                     self.client.models.generate_content,
                     model=model,
-                    contents=prompt,
+                    contents=contents,
                     config=config,
                 ), timeout=90)
                 parsed = response.parsed if getattr(response, "parsed", None) else Storyboard.model_validate_json(response.text)
@@ -190,7 +273,7 @@ class GeminiStudioProvider:
     async def generate_visuals(self, storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
         output = project_dir / "visuals"
         output.mkdir(parents=True, exist_ok=True)
-        references = harvest.screenshots if harvest else []
+        references = [*harvest.image_paths, *harvest.screenshots] if harvest else []
         prompts = [build_visual_prompt(scene.visual_prompt) for scene in storyboard.scenes[1:3]] + [build_visual_prompt(f"Vertical cover artwork for {storyboard.title}")]
         generated: list[StudioAsset] = []
         for index, prompt in enumerate(prompts, start=1):

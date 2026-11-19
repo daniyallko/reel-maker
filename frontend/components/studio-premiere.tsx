@@ -18,6 +18,7 @@ export function StudioPremiere({ output, sourceUrl }: { output: StudioOutput; so
   const [currentTime, setCurrentTime] = useState(0);
   const [notice, setNotice] = useState("");
   const [inspecting, setInspecting] = useState(false);
+  const isWebSource = Boolean(sourceUrl?.startsWith("http://") || sourceUrl?.startsWith("https://"));
 
   async function copyScript() {
     try {
@@ -40,7 +41,7 @@ export function StudioPremiere({ output, sourceUrl }: { output: StudioOutput; so
             <div>
               <p className="mono premiere-kicker">THE PREMIERE PRESS KIT</p>
               <h1>{output.title}</h1>
-              {sourceUrl && <p className="premiere-source">SOURCE / <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{sourceUrl}</a></p>}
+              {sourceUrl && <p className="premiere-source">SOURCE / {isWebSource ? <a href={sourceUrl} target="_blank" rel="noopener noreferrer">{sourceUrl}</a> : output.title}</p>}
             </div>
           </div>
           <Link href="/" className="btn btn-secondary"><Play size={17} aria-hidden="true" /> New URL</Link>
@@ -51,6 +52,7 @@ export function StudioPremiere({ output, sourceUrl }: { output: StudioOutput; so
           <span>{output.scenes.length.toString().padStart(2, "0")} scenes</span>
           <span>{output.bpm} BPM</span>
           <span>1080 × 1920 / 30 fps</span>
+          {output.review_label && <span className="rounded-md border border-white/20 px-2 py-1 text-white/70" role="note">{output.review_label}</span>}
         </div>
 
         <div className="premiere-layout">
@@ -113,7 +115,7 @@ export function StudioPremiere({ output, sourceUrl }: { output: StudioOutput; so
               {output.sources.map((source, index) => (
                 <li key={`${source.url}-${index}`}>
                   <span className="mono">[{index + 1}]</span>
-                  <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a>
+                  {source.url.startsWith("http://") || source.url.startsWith("https://") ? <a href={source.url} target="_blank" rel="noopener noreferrer">{source.title}</a> : <span>{source.title}</span>}
                   <p>{source.claim}</p>
                 </li>
               ))}

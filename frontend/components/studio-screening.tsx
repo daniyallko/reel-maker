@@ -1,6 +1,7 @@
 "use client";
 
-import { ArrowClockwise, Check, Circle, CircleNotch, XCircle } from "@phosphor-icons/react";
+import { ArrowClockwise, Check, CircleNotch, XCircle } from "@phosphor-icons/react";
+import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type { StudioProjectSnapshot } from "@/lib/types";
 import type { ConnectionState } from "@/lib/use-project-events";
@@ -30,24 +31,24 @@ export function StudioScreening({ project, connection, onRetry, error }: { proje
   const latest = events.at(-1);
   const progress = latest?.progress ?? 0;
   const audioPreview = [...events].reverse().find((event) => typeof event.payload?.preview_url === "string")?.payload?.preview_url as string | undefined;
+  const current = events.at(-1);
+  const currentLabel = current?.agent === "pipeline" ? "Pipeline" : AGENTS.find(([id]) => id === current?.agent)?.[1] ?? "Studio preparation";
+  const sourceTitle = project?.source_title || project?.source_url || "Preparing your source";
+  const isWebSource = Boolean(project?.source_url.startsWith("http://") || project?.source_url.startsWith("https://"));
+  const connectionLabel = project?.status === "failed" ? "Production stopped" : connection === "live" ? "Live production" : connection === "stale" ? "Reconnecting to live updates" : connection === "closed" ? "Production review closed" : "Connecting to the studio";
 
   return (
     <div className="glyph-page">
       <GlyphCanvas species={species} settings={settings} />
       <GlyphTweaks settings={settings} onChange={(key, value) => setSettings((current) => ({ ...current, [key]: value }))} species={species} />
       <div className="glyph-page-content">
-        <div className="mb-8 border-b border-white/10 pb-6">
-          <div className="masthead">
-            <div className="avatar" aria-hidden="true" />
-            <h1>Every source becomes a scene.</h1>
-          </div>
-          <p className="mono mb-2 text-[11px] tracking-[.14em] text-white/55">LIVE AUTONOMOUS SCREENING ROOM</p>
-          {project && <p className="mono mt-4 max-w-full break-all text-[11px] text-white/45">SOURCE / <a href={project.source_url} target="_blank" rel="noopener noreferrer" className="underline decoration-white/30 underline-offset-4">{project.source_url}</a></p>}
-          <div className="mt-5 flex items-center justify-between gap-4">
-            <p className="mono text-[11px] text-white/55">{connection.toUpperCase()} / {project?.id ?? "CONNECTING"}</p>
-            <p className="mono text-sm text-white">{Math.round(progress)}%</p>
-          </div>
-          <div className="mt-3 h-px bg-white/15" role="progressbar" aria-label="Studio production progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
+        <div className="screening-heading mb-8 border-b border-white/10 pb-6">
+          <p className="mono mb-3 text-[11px] tracking-[.14em] text-white/55">{connectionLabel.toUpperCase()} / {Math.round(progress)}%</p>
+          <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">Building your cinematic reel</h1>
+          <p className="mt-3 max-w-full break-words text-sm text-white/55">
+            {isWebSource ? <a href={project?.source_url} target="_blank" rel="noopener noreferrer" className="underline decoration-white/30 underline-offset-4">{sourceTitle}</a> : sourceTitle}
+          </p>
+          <div className="mt-5 h-px bg-white/15" role="progressbar" aria-label="Studio production progress" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
             <div className="h-full origin-left bg-white transition-transform duration-500" style={{ transform: `scaleX(${progress / 100})` }} />
           </div>
           <p className="sr-only" role="status" aria-live="polite">{latest?.message ?? "Connecting to the studio"}</p>
@@ -93,27 +94,25 @@ export function StudioScreening({ project, connection, onRetry, error }: { proje
               )}
             </section>
 
-            <aside id="agent-telemetry" className="studio-panel p-4 sm:p-5 lg:col-span-4" aria-label="Agent telemetry">
-              <h2 className="mb-4 text-xl">Agent telemetry</h2>
-              <ol className="divide-y divide-white/10 border-y border-white/10">
-                {AGENTS.map(([id, label], index) => {
-                  const event = [...events].reverse().find((item) => item.agent === id);
-                  const status = project?.status === "failed" && event?.status === "running" ? "failed" : event?.status ?? "pending";
-                  return (
-                    <li key={id} className="flex min-h-16 items-start gap-3 py-3">
-                      <span className="mono w-5 pt-0.5 text-[11px] text-white/40">{String(index + 1).padStart(2, "0")}</span>
-                      <span className="pt-0.5" role="img" aria-label={`${label} ${status === "running" ? "executing" : status}`}>
-                        {status === "running" ? <CircleNotch size={16} className={reduceMotion ? "text-white" : "animate-spin text-white"} /> : status === "complete" ? <Check size={16} /> : status === "failed" ? <XCircle size={16} /> : <Circle size={16} className="text-white/30" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className={`text-sm ${status === "pending" ? "text-white/40" : "text-white"}`}>{label}</p>
-                        <p className="mt-0.5 text-xs leading-5 text-white/45">{event?.message ?? "Waiting for source data"}</p>
-                        <p className="mono mt-1 text-[10px] text-white/35">{event ? `EVENT #${String(event.id).padStart(6, "0")} / ${status.toUpperCase()} / ${event.progress}%` : "WAITING FOR BACKEND RESPONSE"}</p>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ol>
+            <aside id="agent-telemetry" className="studio-panel p-4 sm:p-5 lg:col-span-4" aria-label="Current production process">
+              <p className="mono mb-4 text-[11px] text-white/55">CURRENT PROCESS</p>
+              <AnimatePresence mode="wait" initial={false}>
+                <motion.div
+                  key={current?.id ?? "waiting"}
+                  initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={reduceMotion ? undefined : { opacity: 0, y: -12 }}
+                  transition={{ duration: reduceMotion ? 0 : 0.24, ease: "easeOut" }}
+                  className="min-h-32"
+                >
+                  <span className="mb-4 inline-flex" role="img" aria-label={`${currentLabel} ${current?.status === "running" ? "executing" : current?.status ?? "pending"}`}>
+                    {current?.status === "running" ? <CircleNotch size={24} className={reduceMotion ? "text-white" : "animate-spin text-white"} /> : current?.status === "complete" ? <Check size={24} /> : current?.status === "failed" ? <XCircle size={24} /> : <CircleNotch size={24} className="text-white/25" />}
+                  </span>
+                  <h2 className="text-xl">{currentLabel}</h2>
+                  <p className="mt-2 text-sm leading-6 text-white/55">{current?.message ?? "Preparing the source bundle…"}</p>
+                  <p className="mono mt-4 text-[10px] text-white/35">{current ? `EVENT #${String(current.id).padStart(6, "0")} / ${current.status.toUpperCase()} / ${current.progress}%` : "WAITING FOR BACKEND RESPONSE"}</p>
+                </motion.div>
+              </AnimatePresence>
             </aside>
             <section className="studio-panel overflow-hidden lg:col-span-12" aria-labelledby="backend-stream-title">
               <div className="flex flex-wrap items-end justify-between gap-3 border-b border-white/10 px-4 py-4 sm:px-5">

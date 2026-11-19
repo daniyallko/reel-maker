@@ -67,6 +67,10 @@ def select_brand_accent(palette: list[str]) -> str:
     return best_accent or "#d4a853"
 
 
+def inline_script_json(value) -> str:
+    return json.dumps(value).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
+
+
 def fallback_motion_html(storyboard: Storyboard, assets: list[StudioAsset], accent: str = "#d4a853") -> str:
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
         accent = "#d4a853"
@@ -100,7 +104,7 @@ body {{ width:1080px; height:1920px; overflow:hidden; background:#05060a; color:
 .caption {{ position:absolute; left:72px; right:72px; top:var(--caption-y); color:#ffffffb0; font-size:24px; line-height:1.45; }}
 .beat {{ position:absolute; left:72px; top:1510px; color:{accent}; font:18px monospace; letter-spacing:.14em; }}
 </style></head><body><div class="stage" id="stage"></div><script>
-const scenes = {json.dumps(scene_data)};
+const scenes = {inline_script_json(scene_data)};
 const phaseLayouts = [
   [{{x:168,y:320,w:744,h:600}}, {{x:72,y:340,w:936,h:520}}, {{x:220,y:300,w:640,h:660}}, {{x:72,y:300,w:936,h:600}}],
   [{{x:72,y:500,w:936,h:420}}, {{x:180,y:340,w:720,h:600}}, {{x:300,y:300,w:500,h:650}}, {{x:72,y:360,w:936,h:560}}],
@@ -115,7 +119,30 @@ function build() {{
   scenes.forEach((scene, sceneIndex) => {{
     const root = document.createElement('section');
     root.className = `scene layout-${{sceneIndex}}`;
-    root.innerHTML = `<div class="chrome">LINK2REEL / SCENE ${{String(sceneIndex + 1).padStart(2,'0')}}</div><div class="scene-number">0${{sceneIndex + 1}}</div><img class="browser" src="${{scene.image}}"><h1 class="headline">${{scene.headline.split(' ').map(word => `<span class="word">${{word}}</span>`).join('')}}</h1><p class="caption">${{scene.narration}}</p><div class="beat">128 BPM / 30 FPS</div>`;
+    const chrome = document.createElement('div');
+    chrome.className = 'chrome';
+    chrome.textContent = `LINK2REEL / SCENE ${{String(sceneIndex + 1).padStart(2,'0')}}`;
+    const number = document.createElement('div');
+    number.className = 'scene-number';
+    number.textContent = `0${{sceneIndex + 1}}`;
+    const image = document.createElement('img');
+    image.className = 'browser';
+    image.src = scene.image;
+    const headline = document.createElement('h1');
+    headline.className = 'headline';
+    scene.headline.split(' ').forEach(word => {{
+      const span = document.createElement('span');
+      span.className = 'word';
+      span.textContent = word;
+      headline.appendChild(span);
+    }});
+    const caption = document.createElement('p');
+    caption.className = 'caption';
+    caption.textContent = scene.narration;
+    const beat = document.createElement('div');
+    beat.className = 'beat';
+    beat.textContent = '128 BPM / 30 FPS';
+    root.append(chrome, number, image, headline, caption, beat);
     stage.appendChild(root);
     scene.root = root;
   }});

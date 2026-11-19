@@ -131,6 +131,8 @@ export interface StudioOutput {
   source_url: string | null;
   style: string;
   voice: string;
+  quality_mode?: "strict" | "draft";
+  review_label?: string | null;
   critique_scores?: Record<string, number>;
 }
 
@@ -138,8 +140,10 @@ export interface StudioProjectSnapshot {
   id: string;
   status: ProjectStatus;
   source_url: string;
+  source_title?: string;
   style: string;
   voice: string;
+  quality_mode?: "strict" | "draft";
   created_at: number;
   assets: StudioAsset[];
   events: AgentStatusEvent<StudioOutput, StudioAsset>[];

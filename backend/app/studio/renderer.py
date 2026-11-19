@@ -109,7 +109,7 @@ async def capture_motion_frames(html: str, project_dir: Path, storyboard: Storyb
 
 
 class MotionRenderer:
-    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None) -> StudioOutput:
+    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None, quality_mode: str = "strict", review_label: str | None = None) -> StudioOutput:
         await capture_motion_frames(html, project_dir, storyboard)
         write_ass_captions(storyboard, audio.durations, audio.captions_path)
         output_path = (output_dir or project_dir / "output") / "trailer.mp4"
@@ -133,6 +133,8 @@ class MotionRenderer:
             source_url=source_url or (storyboard.sources[0].url if storyboard.sources else None),
             style=storyboard.style,
             voice=storyboard.voice,
+            quality_mode=quality_mode,
+            review_label=review_label,
             critique_scores=critique_scores or {},
         )
         (output_path.parent / "studio-output.json").write_text(output.model_dump_json(indent=2), encoding="utf-8")

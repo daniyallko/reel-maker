@@ -23,10 +23,44 @@ class VisionAudit(BaseModel):
     patched_html: str | None = None
 
 
-def require_passing_audit(audit: VisionAudit) -> None:
+REQUIRED_CRITERIA = frozenset({"typography/contrast", "safe-zone compliance", "editorial craft", "visual momentum"})
+
+
+def validate_vision_audit(audit: VisionAudit) -> VisionAudit:
+    criteria = [score.criterion for score in audit.scores]
+    if len(criteria) != 4 or set(criteria) != REQUIRED_CRITERIA or len(set(criteria)) != 4:
+        raise ValueError("Vision response must contain exactly four unique criteria")
+    if any(score.score < 1 or score.score > 10 for score in audit.scores):
+        raise ValueError("Vision scores must be between 1 and 10")
+    return audit.model_copy(update={"passed": all(score.score >= 8 for score in audit.scores)})
+
+
+def require_passing_audit(audit: VisionAudit, quality_mode: str = "strict") -> None:
+    threshold = 7 if quality_mode == "draft" else 8
+    try:
+        audit = validate_vision_audit(audit)
+    except ValueError as error:
+        raise RuntimeError(f"Visual audit did not pass the four-criterion {threshold}/10 render gate: {{}}") from error
     scores = {score.criterion: score.score for score in audit.scores}
-    if not audit.passed or len(scores) < 4 or any(score < 8 for score in scores.values()):
-        raise RuntimeError(f"Visual audit did not pass the four-criterion 8/10 render gate: {scores}")
+    if any(score < threshold for score in scores.values()):
+        raise RuntimeError(f"Visual audit did not pass the four-criterion {threshold}/10 render gate: {scores}")
+
+
+def require_unaudited_allowed(quality_mode: str) -> None:
+    if quality_mode != "draft":
+        raise RuntimeError("AI visual review is required in strict quality mode")
+
+
+def should_use_unaudited_fallback(quality_mode: str, attempt: int) -> bool:
+    return quality_mode == "draft" and attempt >= MAX_REVISIONS
+
+
+def review_label_for(audit: VisionAudit | None, quality_mode: str) -> str | None:
+    if quality_mode != "draft":
+        return None
+    if audit is None or not audit.scores or any(score.score < 8 for score in audit.scores):
+        return "Unreviewed draft"
+    return None
 
 
 async def capture_keyframes(html: str, project_dir: Path, times: list[float]) -> Path:
@@ -59,17 +93,21 @@ async def capture_keyframes(html: str, project_dir: Path, times: list[float]) ->
 
 
 class VisionDirector:
-    def __init__(self, client):
+    def __init__(self, client, router=None):
         self.client = client
+        self.router = router
 
     async def audit(self, contact_sheet: Path, html: str) -> VisionAudit:
+        if self.router is not None:
+            return await self.router.audit(contact_sheet, html)
         from google.genai import types
         from app.studio.providers import CORE_MODEL
         prompt = """
 Score typography/contrast, safe-zone compliance, editorial craft, and visual momentum
-from 1-10. Return passed only if every score is at least 8, plus scores and any
-patched_html needed. Keep text razor-sharp, left/grid-aligned, inside y:160-1580,
+from 1-10. Return passed only if every score is at least 8, plus scores and issues.
+Keep text razor-sharp, left/grid-aligned, inside y:160-1580,
 with no overlap or broken images. Check for distinct layouts and no static slideshow.
+Do not return patched HTML; a separate repair agent handles code changes.
 """
         config = types.GenerateContentConfig(
             thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH),
@@ -99,12 +137,35 @@ with no overlap or broken images. Check for distinct layouts and no static slide
                 audit.patched_html = None
         return audit
 
+    async def repair(self, contact_sheet: Path, html: str, audit: VisionAudit, project_dir: Path) -> str:
+        from google.genai import types
+        from app.studio.motion import validate_motion_clock
+        from app.studio.providers import CORE_MODEL
+
+        prompt = f"""
+Repair this deterministic 1080x1920 motion document using these visual audit issues:
+{audit.issues}
+Return only complete HTML. Keep every animation driven by window.seekTo(t), use no
+network calls, timers, external assets, or CSS wall-clock transitions. Preserve real
+local image URLs, safe zones y:160-1580, and distinct beat-phase compositions.
+Original HTML:
+{html}
+"""
+        response = await asyncio.to_thread(
+            self.client.models.generate_content,
+            model=CORE_MODEL,
+            contents=[prompt, types.Part.from_bytes(data=contact_sheet.read_bytes(), mime_type="image/png")],
+        )
+        cleaned = sanitize_motion_html(response.text.removeprefix("```html").removesuffix("```").strip())
+        await validate_motion_clock(cleaned, project_dir)
+        return cleaned
+
     async def safe_audit(self, contact_sheet: Path, html: str) -> VisionAudit:
         try:
             return await self.audit(contact_sheet, html)
-        except Exception as error:
+        except Exception:
             return VisionAudit(
-                passed=True,
-                issues=[f"Vision provider unavailable; deterministic motion retained: {error}"],
+                passed=False,
+                issues=["AI visual review is unavailable."],
                 patched_html=None,
             )

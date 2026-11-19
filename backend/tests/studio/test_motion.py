@@ -1,12 +1,14 @@
+import io
 from pathlib import Path
 
 import pytest
 from PIL import Image
 from playwright.async_api import async_playwright
 
-from app.studio.motion import fallback_motion_html, sanitize_motion_html
+from app.studio.motion import fallback_motion_html, sanitize_motion_html, validate_motion_clock
 from app.studio.providers import mock_storyboard, fallback_visuals
 from app.studio.schemas import HarvestResult
+from app.studio.sources import ingest_text
 from app.studio.urls import configure_offline_page, localize_motion_html
 from app.studio.vision import MAX_REVISIONS, capture_keyframes
 
@@ -162,3 +164,49 @@ def test_motion_uses_harvested_brand_accent(tmp_path: Path):
     assets = fallback_visuals(storyboard, None, tmp_path)
     html = fallback_motion_html(storyboard, assets, accent=accent)
     assert "color:#5e6ad2" in html
+
+
+def test_fallback_visuals_prefer_uploaded_images(tmp_path: Path):
+    uploaded = tmp_path / "upload.png"
+    Image.new("RGB", (1080, 1920), "#204060").save(uploaded)
+    bundle = ingest_text("A cinematic story with a user image.")
+    bundle = bundle.model_copy(update={"image_paths": [uploaded]})
+    assets = fallback_visuals(mock_storyboard("launch", "Fenrir"), bundle, tmp_path)
+    with Image.open(assets[0].local_path) as image:
+        blue = image.getpixel((540, 960))[2]
+    assert blue > 70
+
+
+def test_text_only_visuals_do_not_reuse_orbit_image(tmp_path: Path):
+    from app.media.poster import cover
+
+    bundle = ingest_text("A story with no website or image assets.")
+    assets = fallback_visuals(mock_storyboard("launch", "Fenrir"), bundle, tmp_path)
+    orbit_path = Path(__file__).resolve().parents[2] / "assets/link2reel/sample-site/orbit-hero.jpg"
+    expected = cover(Image.open(orbit_path).convert("RGB"), (1080, 1920), focus_y=0.37).convert("RGBA")
+    expected = Image.alpha_composite(expected, Image.new("RGBA", expected.size, (4, 6, 14, 30)))
+    output = io.BytesIO()
+    expected.convert("RGB").save(output, "PNG", optimize=True)
+    assert assets[0].local_path.read_bytes() != output.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_source_markup_cannot_break_motion_clock_or_inject_html(tmp_path: Path):
+    from app.studio.providers import fallback_storyboard
+
+    bundle = ingest_text("Hello </script><img src=x onerror=alert(1)> world. Second sentence. Third sentence. Fourth sentence.")
+    storyboard = fallback_storyboard(bundle, bundle.citations, "launch", "Fenrir")
+    assets = fallback_visuals(storyboard, bundle, tmp_path)
+    html = fallback_motion_html(storyboard, assets)
+    assert "\\u003c/script\\u003e" in html
+    await validate_motion_clock(html, tmp_path)
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+        await page.evaluate("window.seekTo(0.6)")
+        assert await page.locator(".headline img").count() == 0
+        assert "<img" in await page.locator(".caption").first.inner_text()
+        await browser.close()
+        server.close()

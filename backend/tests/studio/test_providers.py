@@ -9,7 +9,8 @@ from app.studio.providers import (
     GeminiStudioProvider,
     MockStudioProvider,
 )
-from app.studio.schemas import HarvestResult, SourceCitation
+from app.studio.schemas import HarvestResult, SourceBundle, SourceCitation
+from app.studio.sources import ingest_text
 from app.studio.urls import sample_site_url
 
 
@@ -102,3 +103,52 @@ async def test_partial_gemini_tts_falls_back_to_one_consistent_edge_voice(tmp_pa
     monkeypatch.setattr("app.studio.providers.produce_audio", fake_produce)
     result = await provider.synthesize(storyboard, tmp_path)
     assert result == [b"edge", b"edge", b"edge", b"edge"]
+
+
+def test_text_storyboard_uses_user_evidence_and_inline_citations():
+    from app.studio.providers import fallback_storyboard
+
+    bundle = ingest_text("A rehabilitation robot helps patients walk safely.")
+    storyboard = fallback_storyboard(bundle, bundle.citations, "cinematic", "Fenrir")
+    assert "rehabilitation robot" in storyboard.title
+    assert "Orbit" not in storyboard.title
+    assert storyboard.sources[0].url == "inline://text"
+    assert storyboard.sources[0].claim.startswith("A rehabilitation robot")
+
+
+def test_fallback_storyboard_avoids_generic_template_narration():
+    from app.studio.providers import fallback_storyboard
+
+    bundle = ingest_text("Ocean robots collect plastic. They map currents. Their batteries recharge at sea. Fleets coordinate cleanup.")
+    storyboard = fallback_storyboard(bundle, bundle.citations, "deep_dive", "Fenrir")
+    script = " ".join(scene.narration for scene in storyboard.scenes)
+    assert "This is" not in script
+    assert "Behind the landing page" not in script
+    assert "The takeaway is simple" not in script
+    assert "They map currents" in script
+    assert "Their batteries recharge at sea" in script
+    assert all(len(scene.headline) <= 42 for scene in storyboard.scenes)
+
+
+@pytest.mark.asyncio
+async def test_storyboard_receives_uploaded_image_evidence(tmp_path: Path):
+    from PIL import Image
+    from app.studio.providers import mock_storyboard
+
+    image_path = tmp_path / "evidence.png"
+    Image.new("RGB", (32, 48), "#182030").save(image_path)
+    bundle = ingest_text("1 source image: evidence.png").model_copy(update={"image_paths": [image_path]})
+    provider = GeminiStudioProvider("key")
+    captured = {}
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"parsed": mock_storyboard("launch", "Fenrir")})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    await provider.write_storyboard(bundle, bundle.citations, "launch", "Fenrir")
+    contents = captured["contents"]
+    assert isinstance(contents, list)
+    assert any(getattr(part, "inline_data", None) for part in contents[1:])

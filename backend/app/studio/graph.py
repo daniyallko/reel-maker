@@ -10,7 +10,7 @@ from app.studio.motion import fallback_motion_html, generate_motion_html, select
 from app.studio.research import research_url
 from app.studio.renderer import MotionRenderer, verify_studio_video
 from app.studio.schemas import HarvestResult, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
-from app.studio.vision import MAX_REVISIONS, capture_keyframes, require_passing_audit
+from app.studio.vision import MAX_REVISIONS, capture_keyframes, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
 
 
 async def emit_heartbeat(events: EventBus, agent: str, message: str, progress: float, work):
@@ -27,8 +27,11 @@ class StudioState(TypedDict, total=False):
     project_id: str
     project_dir: Path
     source_url: str
+    source_bundle: HarvestResult
     style: str
     voice: str
+    quality_mode: str
+    review_label: str | None
     events: EventBus
     harvest: HarvestResult
     sources: list[SourceCitation]
@@ -41,12 +44,31 @@ class StudioState(TypedDict, total=False):
     critique_scores: dict[str, int]
 
 
+def requires_web_harvest(bundle: HarvestResult) -> bool:
+    return bundle.source_url.lower().startswith(("http://", "https://"))
+
+
+def merge_source_bundle(primary: HarvestResult, uploaded: HarvestResult) -> HarvestResult:
+    return primary.model_copy(update={
+        "kind": uploaded.kind,
+        "dom_copy": "\n\n".join(part for part in (primary.dom_copy, uploaded.dom_copy) if part),
+        "assets": [*uploaded.assets, *primary.assets],
+        "image_paths": [*uploaded.image_paths, *primary.image_paths],
+        "citations": [*primary.citations, *uploaded.citations],
+    })
+
+
 def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None, sample: bool = False):
     async def research(state: StudioState) -> dict[str, Any]:
         events = state["events"]
+        bundle = state.get("source_bundle")
         await events.emit("harvester", "running", "Capturing the live page and brand system…", 8)
         await events.emit("researcher", "running", "Finding the story beyond the landing page…", 10)
-        if sample:
+        if bundle is not None and not requires_web_harvest(bundle):
+            harvested = bundle
+            sources = bundle.citations
+            await events.emit("researcher", "complete", f"{len(sources)} supplied source citations indexed.", 24)
+        elif sample:
             harvested = await emit_heartbeat(events, "harvester", "Capturing the live page and brand system…", 8, harvest(state["source_url"], state["project_dir"]))
             sources: list[SourceCitation] = []
         else:
@@ -54,8 +76,12 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
                 emit_heartbeat(events, "harvester", "Capturing the live page and brand system…", 8, harvest(state["source_url"], state["project_dir"])),
                 emit_heartbeat(events, "researcher", "Finding the story beyond the landing page…", 10, research_url(state["source_url"], state["source_url"])),
             )
+        if bundle is not None and requires_web_harvest(bundle):
+            harvested = merge_source_bundle(harvested, bundle)
+            sources = [*sources, *bundle.citations]
         await events.emit("harvester", "complete", f"{len(harvested.assets)} real source assets captured.", 20, assets=harvested.assets)
-        await events.emit("researcher", "complete", f"{len(sources)} external sources indexed.", 24)
+        if bundle is None or requires_web_harvest(bundle):
+            await events.emit("researcher", "complete", f"{len(sources)} external sources indexed.", 24)
         return {"harvest": harvested, "sources": sources, "assets": harvested.assets}
 
     async def write(state: StudioState) -> dict[str, Any]:
@@ -88,31 +114,55 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
 
     async def vision(state: StudioState) -> dict[str, Any]:
         events = state["events"]
+        quality_mode = state.get("quality_mode", "strict")
         await events.emit("vision_director", "running", "Auditing six director stills…", 78)
         html = state["html"]
         audit = None
+        reported = 0
         for attempt in range(MAX_REVISIONS + 1):
             contact = await capture_keyframes(html, state["project_dir"], [0.6, 3.5, 8, 14, 21, 27])
             if vision_director is None:
                 break
             audit = await vision_director.safe_audit(contact, html)
+            history = getattr(vision_director.router, "history", [])
+            for entry in history[reported:]:
+                await events.emit("vision_director", "running", f"Provider response / {entry}", 79)
+            reported = len(history)
             try:
-                require_passing_audit(audit)
+                require_passing_audit(audit, quality_mode)
             except RuntimeError:
+                if not audit.scores:
+                    if attempt == MAX_REVISIONS:
+                        require_unaudited_allowed(quality_mode)
+                        html = fallback_motion_html(state["storyboard"], state["visuals"], accent=select_brand_accent(state["harvest"].palette))
+                        break
+                    html = fallback_motion_html(state["storyboard"], state["visuals"], accent=select_brand_accent(state["harvest"].palette))
+                    continue
                 if attempt == MAX_REVISIONS:
+                    if should_use_unaudited_fallback(quality_mode, attempt):
+                        await events.emit("vision_director", "running", "Audit thresholds missed; rendering an unreviewed deterministic draft.", 82)
+                        audit = None
+                        html = fallback_motion_html(state["storyboard"], state["visuals"], accent=select_brand_accent(state["harvest"].palette))
+                        break
                     raise
-                html = audit.patched_html or fallback_motion_html(state["storyboard"], state["visuals"], accent=select_brand_accent(state["harvest"].palette))
+                try:
+                    html = await vision_director.repair(contact, html, audit, state["project_dir"])
+                except Exception:
+                    await events.emit("vision_director", "running", "Motion repair failed; deterministic template selected.", 80)
+                    html = fallback_motion_html(state["storyboard"], state["visuals"], accent=select_brand_accent(state["harvest"].palette))
             else:
                 break
         asset = StudioAsset(id="critique", kind="critique", label="Director contact sheet", url=f"/media/{state['project_id']}/audit/contact-sheet.png", mime_type="image/png", local_path=contact)
         message = audit.issues[0] if audit and audit.issues else ("Six stills passed the director audit." if audit and audit.passed else "Six director stills captured for offline review.")
-        await events.emit("vision_director", "complete", message, 84, assets=[asset], payload={"critique_scores": {score.criterion: score.score for score in audit.scores} if audit else {}})
-        return {"html": html, "assets": state["assets"] + [asset], "critique_scores": {score.criterion: score.score for score in audit.scores} if audit else {}}
+        scores = {score.criterion: score.score for score in audit.scores} if audit else {}
+        review_label = review_label_for(audit, quality_mode)
+        await events.emit("vision_director", "complete", message, 84, assets=[asset], payload={"critique_scores": scores, "review_label": review_label})
+        return {"html": html, "assets": state["assets"] + [asset], "critique_scores": scores, "review_label": review_label}
 
     async def render(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("renderer", "running", "Capturing 30fps motion frames and mixing audio…", 90)
-        output = await renderer.render(state["html"], state["storyboard"], state["visuals"], state["audio"], state["project_dir"], source_url=state["source_url"], critique_scores=state.get("critique_scores", {}))
+        output = await renderer.render(state["html"], state["storyboard"], state["visuals"], state["audio"], state["project_dir"], source_url=state["source_url"], critique_scores=state.get("critique_scores", {}), quality_mode=state.get("quality_mode", "strict"), review_label=state.get("review_label"))
         await events.emit("renderer", "complete", "Final motion reel exported.", 96)
         return {"output": output}
 

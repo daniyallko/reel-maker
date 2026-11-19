@@ -15,22 +15,27 @@ class StudioAsset(BaseModel):
     local_path: Path = Field(exclude=True)
 
 
-class HarvestResult(BaseModel):
-    source_url: str
+class SourceCitation(BaseModel):
+    url: str
     title: str
+    claim: str
+
+
+class SourceBundle(BaseModel):
+    kind: Literal["url", "text", "mixed", "sample"] = "url"
+    title: str
+    source_url: str
+    dom_copy: str
     palette: list[str]
     fonts: list[str]
-    dom_copy: str
     assets: list[StudioAsset]
+    citations: list[SourceCitation] = Field(default_factory=list)
     screenshots: list[Path] = Field(default_factory=list, exclude=True)
     scroll_video: Path = Field(exclude=True)
     image_paths: list[Path] = Field(default_factory=list, exclude=True)
 
 
-class SourceCitation(BaseModel):
-    url: str
-    title: str
-    claim: str
+HarvestResult = SourceBundle
 
 
 class StoryScene(BaseModel):
@@ -88,6 +93,8 @@ class StudioOutput(BaseModel):
     source_url: str | None = None
     style: str = "launch"
     voice: str = "Fenrir"
+    quality_mode: Literal["strict", "draft"] = "strict"
+    review_label: str | None = None
     critique_scores: dict[str, int] = Field(default_factory=dict)
 
 
@@ -95,8 +102,10 @@ class StudioProjectSnapshot(BaseModel):
     id: str
     status: ProjectStatus
     source_url: str
+    source_title: str = ""
     style: str
     voice: str
+    quality_mode: Literal["strict", "draft"] = "strict"
     created_at: float
     assets: list[StudioAsset] = Field(default_factory=list)
     events: list = Field(default_factory=list)

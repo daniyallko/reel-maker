@@ -13,9 +13,27 @@ from app.schemas import ProjectStatus
 from app.studio.graph import build_studio_graph
 from app.studio.providers import GeminiStudioProvider, MockStudioProvider
 from app.studio.renderer import SAMPLE_OUTPUT, MotionRenderer
-from app.studio.schemas import StudioAsset, StudioOutput, StudioProjectSnapshot
-from app.studio.urls import sample_site_url, validate_public_url
+from app.studio.schemas import SourceBundle, SourceCitation, StudioAsset, StudioOutput, StudioProjectSnapshot
+from app.studio.sources import ingest_text, ingest_uploads
+from app.studio.urls import validate_public_url
 from app.studio.vision import VisionDirector
+from app.studio.vision_providers import build_vision_router
+
+
+def _image_manifest(assets: list[StudioAsset]) -> str:
+    if not assets:
+        return ""
+    labels = ", ".join(asset.label for asset in assets)
+    return f"{len(assets)} source image{'s' if len(assets) != 1 else ''}: {labels}"
+
+
+def _upload_citations(text: str, assets: list[StudioAsset]) -> list[SourceCitation]:
+    citations = []
+    if text:
+        citations.append(SourceCitation(url="inline://uploads", title="Uploaded documents", claim=text[:240]))
+    if assets:
+        citations.append(SourceCitation(url="inline://images", title="Uploaded images", claim=_image_manifest(assets)))
+    return citations
 
 
 @dataclass
@@ -28,6 +46,9 @@ class StudioJob:
     events: EventBus
     created_at: float = field(default_factory=time.time)
     status: ProjectStatus = ProjectStatus.QUEUED
+    source_bundle: SourceBundle | None = None
+    source_title: str = ""
+    quality_mode: str = "strict"
     assets: list[StudioAsset] = field(default_factory=list)
     output: StudioOutput | None = None
     error: str | None = None
@@ -38,8 +59,10 @@ class StudioJob:
             id=self.id,
             status=self.status,
             source_url=self.source_url,
+            source_title=self.source_title or self.source_url,
             style=self.style,
             voice=self.voice,
+            quality_mode=self.quality_mode,
             created_at=self.created_at,
             assets=self.assets,
             events=self.events.events,
@@ -75,14 +98,16 @@ class StudioJobManager:
             style=output.style,
             voice=output.voice,
             directory=directory,
+            source_title=output.title,
+            quality_mode=output.quality_mode,
             events=EventBus(project_id),
             status=ProjectStatus.COMPLETE,
             output=output,
         )
         self.jobs[project_id] = job
 
-    async def create(self, url: str, style: str, voice: str, sample: bool = False) -> StudioProjectSnapshot:
-        source_url = sample_site_url() if sample else await validate_public_url(url)
+    async def create(self, url: str, style: str, voice: str, sample: bool = False, quality_mode: str = "strict") -> StudioProjectSnapshot:
+        source_url = "https://daniyal.pro" if sample else await validate_public_url(url)
         project_id = self.new_id()
         directory = self.settings.data_dir / project_id
         directory.mkdir(parents=True, exist_ok=False)
@@ -92,11 +117,64 @@ class StudioJobManager:
             style=style,
             voice=voice,
             directory=directory,
+            source_title="Mohd Daniyal — Production AI in Motion" if sample else source_url,
+            quality_mode=quality_mode,
             events=EventBus(project_id),
         )
         self.jobs[project_id] = job
         logging.getLogger(__name__).info("Creating LINK2REEL project %s for %s", project_id, source_url)
         job.task = asyncio.create_task(self._run(job, sample), name=f"link2reel-{project_id}")
+        return job.snapshot()
+
+    async def create_input(self, source: str, style: str, voice: str, files: list[tuple[str, str, bytes]], quality_mode: str = "strict") -> StudioProjectSnapshot:
+        source = source.strip()
+        project_id = self.new_id()
+        directory = self.settings.data_dir / project_id
+        directory.mkdir(parents=True, exist_ok=False)
+        uploaded_text, uploaded_assets, image_paths = ingest_uploads(files, directory)
+        is_url = source.lower().startswith(("http://", "https://"))
+        if is_url:
+            source_url = await validate_public_url(source)
+            bundle = SourceBundle(
+                kind="mixed" if files else "url",
+                title=source_url,
+                source_url=source_url,
+                dom_copy=uploaded_text,
+                palette=[],
+                fonts=[],
+                assets=uploaded_assets,
+                citations=_upload_citations(uploaded_text, uploaded_assets),
+                image_paths=image_paths,
+                scroll_video=Path(),
+            )
+        else:
+            text = source or uploaded_text
+            if not text and not uploaded_assets:
+                raise ValueError("Enter a topic, description, URL, or source file.")
+            bundle = ingest_text(text or Path(files[0][0]).stem, title=None if source else Path(files[0][0]).stem)
+            combined = "\n\n".join(part for part in (source, uploaded_text) if part).strip() or _image_manifest(uploaded_assets)
+            citations = [*_upload_citations(uploaded_text, uploaded_assets), *bundle.citations]
+            bundle = bundle.model_copy(update={
+                "kind": "mixed" if files else "text",
+                "dom_copy": combined,
+                "assets": uploaded_assets,
+                "image_paths": image_paths,
+                "citations": citations,
+            })
+        job = StudioJob(
+            id=project_id,
+            source_url=bundle.source_url,
+            source_bundle=bundle,
+            source_title=bundle.title,
+            quality_mode=quality_mode,
+            style=style,
+            voice=voice,
+            directory=directory,
+            events=EventBus(project_id),
+        )
+        self.jobs[project_id] = job
+        logging.getLogger(__name__).info("Creating LINK2REEL project %s for %s", project_id, bundle.source_url)
+        job.task = asyncio.create_task(self._run(job, False), name=f"link2reel-{project_id}")
         return job.snapshot()
 
     async def _run(self, job: StudioJob, sample: bool) -> None:
@@ -109,15 +187,17 @@ class StudioJobManager:
                 graph = build_studio_graph(
                     provider,
                     MotionRenderer(),
-                    None if sample else VisionDirector(provider.client),
+                    None if sample else VisionDirector(provider.client, router=build_vision_router(self.settings, provider.client)),
                     sample=sample,
                 )
                 result = await graph.ainvoke({
                     "project_id": job.id,
                     "project_dir": job.directory,
                     "source_url": job.source_url,
+                    "source_bundle": job.source_bundle,
                     "style": job.style,
                     "voice": job.voice,
+                    "quality_mode": job.quality_mode,
                     "events": job.events,
                 })
                 job.assets = result["assets"]
@@ -142,7 +222,7 @@ class StudioJobManager:
             destination.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / relative, destination)
             assets.append(StudioAsset(**{**data, "url": f"/media/{job.id}/{relative}", "local_path": destination}))
-        await job.events.emit("harvester", "complete", "Real sample-site assets loaded.", 20, assets=assets[:3])
+        await job.events.emit("harvester", "complete", "Portfolio captures and CV evidence loaded.", 20, assets=assets[:3])
         critique_path = job.directory / "audit" / "contact-sheet.png"
         critique_path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / "audit" / "contact-sheet.png", critique_path)
