@@ -87,9 +87,9 @@ async def capture_keyframes(html: str, project_dir: Path, times: list[float]) ->
         page = await browser.new_page(viewport={"width": 1080, "height": 1920})
         server = await configure_offline_page(page, project_dir)
         await page.set_content(localize_motion_html(html, project_dir, server.base_url), wait_until="load")
-        for timestamp in times:
+        for index, timestamp in enumerate(times):
             await page.evaluate(f"window.seekTo({timestamp})")
-            path = audit_dir / f"frame-{timestamp:.1f}.png"
+            path = audit_dir / f"frame-{index:02d}-{timestamp:.3f}.png"
             await page.screenshot(path=str(path))
             frames.append(path)
         await browser.close()
@@ -101,7 +101,7 @@ async def capture_keyframes(html: str, project_dir: Path, times: list[float]) ->
         x = (index % 3) * 360
         y = (index // 3) * 640
         contact.paste(image, (x, y))
-        draw.text((x + 20, y + 18), f"t={times[index]:.1f}s", fill="#d4a853")
+        draw.text((x + 20, y + 18), f"t={times[index]:.3f}s", fill="#d4a853")
     path = audit_dir / "contact-sheet.png"
     contact.save(path, "PNG", optimize=True)
     return path
@@ -124,7 +124,7 @@ is at least 8, plus scores and issues.
 Keep text razor-sharp, left/grid-aligned, inside y:160-1580,
 with no overlap or broken images. Check for distinct layouts and no static slideshow.
 Check that scenes form a coherent narrative and every visible asset supports its scene.
-Flag irrelevant screenshots and abstract placeholders.
+Penalize irrelevant screenshots, abstract placeholder subjects, generic website copy, and repeated compositions.
 Do not return patched HTML; a separate repair agent handles code changes.
 """
         config = types.GenerateContentConfig(

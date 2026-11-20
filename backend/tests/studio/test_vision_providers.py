@@ -97,7 +97,14 @@ async def test_retry_after_is_honored(tmp_path: Path, monkeypatch):
 
 
 def test_shared_provider_prompt_covers_storyboard_relevance():
-    for term in ("narrative alignment", "asset relevance", "irrelevant screenshots", "abstract placeholders"):
+    for term in (
+        "narrative alignment",
+        "asset relevance",
+        "irrelevant screenshots",
+        "abstract placeholder subjects",
+        "generic website copy",
+        "repeated compositions",
+    ):
         assert term in AUDIT_PROMPT
 
 

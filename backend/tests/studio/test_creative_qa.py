@@ -24,7 +24,14 @@ CRITERIA = (
     "asset relevance",
 )
 REVIEW_TIMES = [0.6, 1.0, 4.5, 9.5, 15.0, 21.5, 28.5, 31.5]
-PROMPT_TERMS = ("narrative alignment", "asset relevance", "irrelevant screenshots", "abstract placeholders")
+PROMPT_TERMS = (
+    "narrative alignment",
+    "asset relevance",
+    "irrelevant screenshots",
+    "abstract placeholder subjects",
+    "generic website copy",
+    "repeated compositions",
+)
 
 
 def test_review_times_cover_every_scene_and_motion_pair():
@@ -53,6 +60,27 @@ async def test_contact_sheet_has_enough_rows_for_all_review_times(tmp_path: Path
 
     with Image.open(contact_sheet) as image:
         assert image.size == (1080, 1920)
+
+
+@pytest.mark.asyncio
+async def test_contact_sheet_preserves_subsecond_distinct_frames(tmp_path: Path):
+    html = """
+<html><head><style>html, body { margin: 0; width: 100%; height: 100%; background: #ff0000; }</style></head>
+<body><script>
+window.seekTo = t => {
+  const color = t === 1 ? '#ff0000' : '#0000ff';
+  document.documentElement.style.background = color;
+  document.body.style.background = color;
+};
+</script></body></html>
+"""
+    contact_sheet = await capture_keyframes(html, tmp_path, [1.0, 1.04])
+
+    assert (tmp_path / "audit" / "frame-00-1.000.png").exists()
+    assert (tmp_path / "audit" / "frame-01-1.040.png").exists()
+    with Image.open(contact_sheet) as image:
+        assert image.getpixel((180, 320)) == (255, 0, 0)
+        assert image.getpixel((540, 320)) == (0, 0, 255)
 
 
 class AuditClient:

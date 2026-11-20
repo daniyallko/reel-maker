@@ -15,7 +15,8 @@ is at least 8, plus scores and issues.
 Keep text razor-sharp, left/grid-aligned, inside y:160-1580, with no overlap or broken
 images. Check for distinct layouts and no static slideshow.
 Check that scenes form a coherent narrative and every visible asset supports its scene.
-Flag irrelevant screenshots and abstract placeholders. Return only valid JSON.
+Penalize irrelevant screenshots, abstract placeholder subjects, generic website copy, and repeated compositions.
+Return only valid JSON.
 """
 
 
