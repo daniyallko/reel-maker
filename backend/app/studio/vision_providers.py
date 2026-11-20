@@ -9,10 +9,13 @@ import httpx
 from app.studio.vision import VisionAudit, validate_vision_audit
 
 AUDIT_PROMPT = """
-Score typography/contrast, safe-zone compliance, editorial craft, and visual momentum
-from 1-10. Return passed only if every score is at least 8, plus scores and issues.
+Score typography/contrast, safe-zone compliance, editorial craft, visual momentum,
+narrative alignment, and asset relevance from 1-10. Return passed only if every score
+is at least 8, plus scores and issues.
 Keep text razor-sharp, left/grid-aligned, inside y:160-1580, with no overlap or broken
-images. Check for distinct layouts and no static slideshow. Return only valid JSON.
+images. Check for distinct layouts and no static slideshow.
+Check that scenes form a coherent narrative and every visible asset supports its scene.
+Flag irrelevant screenshots and abstract placeholders. Return only valid JSON.
 """
 
 

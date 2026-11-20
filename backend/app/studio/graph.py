@@ -11,7 +11,7 @@ from app.studio.research import fallback_research_plan, fallback_research_report
 from app.studio.renderer import MotionRenderer, verify_studio_video
 from app.studio.schemas import HarvestResult, ResearchReport, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
 from app.studio.timeline import align_audio_timeline
-from app.studio.vision import MAX_REVISIONS, capture_keyframes, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
+from app.studio.vision import MAX_REVISIONS, capture_keyframes, director_review_times, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
 
 
 async def emit_heartbeat(events: EventBus, agent: str, message: str, progress: float, work):
@@ -168,12 +168,13 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def vision(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         quality_mode = state.get("quality_mode", "strict")
-        await events.emit("vision_director", "running", "Auditing six director stills…", 78)
+        review_times = director_review_times(state["storyboard"])
+        await events.emit("vision_director", "running", f"Auditing {len(review_times)} director stills…", 78)
         html = state["html"]
         audit = None
         reported = 0
         for attempt in range(MAX_REVISIONS + 1):
-            contact = await capture_keyframes(html, state["project_dir"], [0.6, 3.5, 8, 14, 21, 27])
+            contact = await capture_keyframes(html, state["project_dir"], review_times)
             if vision_director is None:
                 break
             audit = await vision_director.safe_audit(contact, html)
@@ -206,7 +207,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
             else:
                 break
         asset = StudioAsset(id="critique", kind="critique", label="Director contact sheet", url=f"/media/{state['project_id']}/audit/contact-sheet.png", mime_type="image/png", local_path=contact)
-        message = audit.issues[0] if audit and audit.issues else ("Six stills passed the director audit." if audit and audit.passed else "Six director stills captured for offline review.")
+        message = audit.issues[0] if audit and audit.issues else (f"{len(review_times)} stills passed the director audit." if audit and audit.passed else f"{len(review_times)} director stills captured for offline review.")
         scores = {score.criterion: score.score for score in audit.scores} if audit else {}
         review_label = review_label_for(audit, quality_mode)
         await events.emit("vision_director", "complete", message, 84, assets=[asset], payload={"critique_scores": scores, "review_label": review_label})

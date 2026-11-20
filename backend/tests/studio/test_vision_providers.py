@@ -6,13 +6,21 @@ import pytest
 
 from app.studio.vision import CriterionScore, VisionAudit
 from app.studio.vision_providers import (
+    AUDIT_PROMPT,
     OpenAICompatibleVisionProvider,
     RetryableProviderError,
     VisionProviderRouter,
     build_vision_router,
 )
 
-CRITERIA = ("typography/contrast", "safe-zone compliance", "editorial craft", "visual momentum")
+CRITERIA = (
+    "typography/contrast",
+    "safe-zone compliance",
+    "editorial craft",
+    "visual momentum",
+    "narrative alignment",
+    "asset relevance",
+)
 
 
 def audit(score: int = 8) -> VisionAudit:
@@ -88,6 +96,11 @@ async def test_retry_after_is_honored(tmp_path: Path, monkeypatch):
     assert sleeps == [0.01]
 
 
+def test_shared_provider_prompt_covers_storyboard_relevance():
+    for term in ("narrative alignment", "asset relevance", "irrelevant screenshots", "abstract placeholders"):
+        assert term in AUDIT_PROMPT
+
+
 @pytest.mark.asyncio
 async def test_openai_compatible_provider_sends_model_image_and_schema(tmp_path: Path):
     contact = tmp_path / "contact.png"
@@ -115,6 +128,7 @@ async def test_openai_compatible_provider_sends_model_image_and_schema(tmp_path:
     result = await provider.audit(contact, "html")
     assert result.passed is True
     assert captured["body"]["model"] == "qwen/qwen3.8-27b"
+    assert captured["body"]["messages"][0]["content"][0]["text"] == AUDIT_PROMPT
     assert captured["body"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
     assert captured["body"]["response_format"]["type"] == "json_object"
     await provider.client.aclose()

@@ -2,6 +2,15 @@ import pytest
 
 from app.studio.vision import CriterionScore, VisionDirector, VisionAudit
 
+CRITERIA = (
+    "typography/contrast",
+    "safe-zone compliance",
+    "editorial craft",
+    "visual momentum",
+    "narrative alignment",
+    "asset relevance",
+)
+
 
 class FailingClient:
     class models:
@@ -29,24 +38,45 @@ def test_render_gate_rejects_low_or_missing_scores():
         require_passing_audit(VisionAudit(passed=True, issues=[], scores=[]))
 
 
-def test_render_gate_accepts_four_scores_of_eight_or_higher():
+def test_render_gate_accepts_six_scores_of_eight_or_higher():
     from app.studio.vision import CriterionScore, require_passing_audit
 
     audit = VisionAudit(
         passed=True,
         issues=[],
-        scores=[CriterionScore(criterion=name, score=8) for name in ("typography/contrast", "safe-zone compliance", "editorial craft", "visual momentum")],
+        scores=[CriterionScore(criterion=name, score=8) for name in CRITERIA],
     )
     require_passing_audit(audit)
 
 
 def scored_audit(score: int) -> VisionAudit:
-    names = ("typography/contrast", "safe-zone compliance", "editorial craft", "visual momentum")
     return VisionAudit(
         passed=score >= 8,
         issues=[],
-        scores=[CriterionScore(criterion=name, score=score) for name in names],
+        scores=[CriterionScore(criterion=name, score=score) for name in CRITERIA],
     )
+
+
+@pytest.mark.parametrize("criterion", CRITERIA)
+def test_every_criterion_uses_strict_and_draft_thresholds(criterion: str):
+    from app.studio.vision import require_passing_audit
+
+    seven = VisionAudit(
+        passed=False,
+        issues=[],
+        scores=[CriterionScore(criterion=name, score=7 if name == criterion else 8) for name in CRITERIA],
+    )
+    with pytest.raises(RuntimeError, match="six-criterion 8/10"):
+        require_passing_audit(seven, "strict")
+    require_passing_audit(seven, "draft")
+
+    six = VisionAudit(
+        passed=False,
+        issues=[],
+        scores=[CriterionScore(criterion=name, score=6 if name == criterion else 8) for name in CRITERIA],
+    )
+    with pytest.raises(RuntimeError, match="six-criterion 7/10"):
+        require_passing_audit(six, "draft")
 
 
 def test_draft_accepts_seven_with_ui_metadata_label():
