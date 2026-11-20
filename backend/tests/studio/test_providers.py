@@ -152,3 +152,47 @@ async def test_storyboard_receives_uploaded_image_evidence(tmp_path: Path):
     contents = captured["contents"]
     assert isinstance(contents, list)
     assert any(getattr(part, "inline_data", None) for part in contents[1:])
+
+
+@pytest.mark.asyncio
+async def test_gemini_storyboard_request_contains_supplied_research_without_source_content():
+    from app.studio.providers import mock_storyboard
+    from app.studio.schemas import EvidenceClaim, ResearchReport
+
+    bundle = ingest_text("Ocean robots")
+    research = ResearchReport(
+        topic="Autonomous ocean cleanup",
+        angle="From collection to recycling",
+        summary="A sourced account of the complete cleanup cycle.",
+        claims=[EvidenceClaim(text="Robots collect floating plastic.", source_refs=[0])],
+        sources=[
+            SourceCitation(
+                url="https://example.com/cleanup-evidence",
+                title="Cleanup field report",
+                claim="Robots collect floating plastic.",
+                content="PRIVATE_RETRIEVED_SOURCE_CONTENT",
+            )
+        ],
+        queries=["ocean cleanup robots"],
+        external_research=True,
+        provider="gemini",
+    )
+    provider = GeminiStudioProvider("key")
+    captured = {}
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"parsed": mock_storyboard("deep_dive", "Fenrir")})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    await provider.write_storyboard(bundle, bundle.citations, "deep_dive", "Fenrir", research=research)
+    prompt = captured["contents"][0]
+    assert "Autonomous ocean cleanup" in prompt
+    assert "From collection to recycling" in prompt
+    assert "A sourced account of the complete cleanup cycle." in prompt
+    assert "Robots collect floating plastic." in prompt
+    assert '"source_refs": [0]' in prompt
+    assert "https://example.com/cleanup-evidence" in prompt
+    assert "PRIVATE_RETRIEVED_SOURCE_CONTENT" not in prompt

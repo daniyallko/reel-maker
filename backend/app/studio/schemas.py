@@ -68,14 +68,43 @@ class ResearchReport(BaseModel):
 HarvestResult = SourceBundle
 
 
+class SceneMetric(BaseModel):
+    label: str
+    value: float
+    display: str
+
+
 class StoryScene(BaseModel):
     id: str
     start: float
     end: float
-    headline: str
+    headline: str = Field(max_length=42)
     narration: str
     visual_prompt: str
     source_refs: list[int] = Field(default_factory=list)
+    visual_type: Literal[
+        "screenshot",
+        "source_image",
+        "generated_art",
+        "kinetic_type",
+        "diagram",
+        "data",
+    ] = "generated_art"
+    layout: Literal["hero", "split", "bento", "full_bleed"] = "hero"
+    camera: Literal["push_in", "pull_out", "pan_left", "pan_right", "static"] = "push_in"
+    animation: Literal["clip_reveal", "stagger", "counter_roll", "path_draw", "parallax"] = "clip_reveal"
+    transition: Literal["cut", "wipe", "whip", "dissolve"] = "cut"
+    sfx: Literal["whoosh", "pop", "bass_drop", "none"] = "none"
+    callouts: list[str] = Field(default_factory=list, max_length=4)
+    metrics: list[SceneMetric] = Field(default_factory=list, max_length=3)
+
+    @model_validator(mode="after")
+    def valid_visual_payload(self):
+        if self.visual_type == "diagram" and len(self.callouts) < 2:
+            raise ValueError("Diagram scenes need at least two callouts")
+        if self.visual_type == "data" and not self.metrics:
+            raise ValueError("Data scenes need metrics")
+        return self
 
 
 class Storyboard(BaseModel):
@@ -84,18 +113,23 @@ class Storyboard(BaseModel):
     voice: str
     duration: float = Field(ge=30, le=40)
     bpm: int = 128
-    scenes: list[StoryScene]
+    scenes: list[StoryScene] = Field(min_length=4, max_length=8)
     sources: list[SourceCitation]
     speech_style: str
 
     @model_validator(mode="after")
     def valid_timeline(self):
-        if len(self.scenes) != 4:
-            raise ValueError("Storyboard needs exactly four scenes")
+        ids = [scene.id for scene in self.scenes]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Scene IDs must be unique")
         cursor = 0.0
         for scene in self.scenes:
             if abs(scene.start - cursor) > 0.05 or scene.end <= scene.start:
                 raise ValueError("Scenes must be contiguous and increasing")
+            if scene.end - scene.start < 1.8:
+                raise ValueError("Scenes must last at least 1.8 seconds")
+            if not scene.source_refs or any(ref < 0 or ref >= len(self.sources) for ref in scene.source_refs):
+                raise ValueError("Every scene needs valid source_refs")
             cursor = scene.end
         if abs(cursor - self.duration) > 0.05:
             raise ValueError("Scenes must fill the storyboard duration")

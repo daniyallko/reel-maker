@@ -1,4 +1,5 @@
 import asyncio
+import json
 import mimetypes
 import tempfile
 from pathlib import Path
@@ -32,10 +33,66 @@ FALLBACK_MODEL = "gemini-3.5-flash-lite"
 
 def mock_storyboard(style: str, voice: str) -> Storyboard:
     scenes = [
-        StoryScene(id="hook", start=0, end=2.5, headline="YOUR NEXT IDEA IS ALREADY IN ORBIT", narration="Your next big idea is already hiding in your notes.", visual_prompt="Kinetic 3D website slab slam with the Orbit Notes brand.", source_refs=[0]),
-        StoryScene(id="problem", start=2.5, end=12, headline="SCATTERED THOUGHTS GET LOST", narration="Most notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.", visual_prompt="Constellation of connected ideas resolving from scattered notes.", source_refs=[0, 1]),
-        StoryScene(id="system", start=12, end=25, headline="LOCAL FIRST. LINKED BY DESIGN.", narration="The constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.", visual_prompt="Real Orbit Notes interface with glowing graph connections and privacy callouts.", source_refs=[0, 1]),
-        StoryScene(id="takeaway", start=25, end=32, headline="THINK IN PUBLIC. KEEP IT YOURS.", narration="Seven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.", visual_prompt="Monday review card resolving into the Orbit Notes cover thumbnail.", source_refs=[0]),
+        StoryScene(
+            id="hook",
+            start=0,
+            end=2.5,
+            headline="YOUR NEXT IDEA IS ALREADY IN ORBIT",
+            narration="Your next big idea is already hiding in your notes.",
+            visual_prompt="Kinetic 3D website slab slam with the Orbit Notes brand.",
+            source_refs=[0],
+            visual_type="screenshot",
+            layout="full_bleed",
+            camera="push_in",
+            animation="clip_reveal",
+            transition="cut",
+            sfx="pop",
+        ),
+        StoryScene(
+            id="problem",
+            start=2.5,
+            end=12,
+            headline="SCATTERED THOUGHTS GET LOST",
+            narration="Most notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.",
+            visual_prompt="Constellation of connected ideas resolving from scattered notes.",
+            source_refs=[0, 1],
+            visual_type="generated_art",
+            layout="hero",
+            camera="pan_right",
+            animation="parallax",
+            transition="wipe",
+            sfx="whoosh",
+        ),
+        StoryScene(
+            id="system",
+            start=12,
+            end=25,
+            headline="LOCAL FIRST. LINKED BY DESIGN.",
+            narration="The constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.",
+            visual_prompt="Real Orbit Notes interface with glowing graph connections and privacy callouts.",
+            source_refs=[0, 1],
+            visual_type="screenshot",
+            layout="split",
+            camera="pull_out",
+            animation="stagger",
+            transition="whip",
+            sfx="bass_drop",
+        ),
+        StoryScene(
+            id="takeaway",
+            start=25,
+            end=32,
+            headline="THINK IN PUBLIC. KEEP IT YOURS.",
+            narration="Seven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.",
+            visual_prompt="Monday review card resolving into the Orbit Notes cover thumbnail.",
+            source_refs=[0],
+            visual_type="source_image",
+            layout="hero",
+            camera="static",
+            animation="clip_reveal",
+            transition="dissolve",
+            sfx="none",
+        ),
     ]
     return Storyboard(
         title="Orbit Notes — Think in Public",
@@ -68,6 +125,12 @@ def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyb
                 narration="Mohd Daniyal builds production AI systems that turn complex research into reliable products.",
                 visual_prompt="A dramatic close crop of the real Mohd Daniyal portfolio interface with no added text.",
                 source_refs=[0, 1],
+                visual_type="screenshot",
+                layout="full_bleed",
+                camera="push_in",
+                animation="clip_reveal",
+                transition="cut",
+                sfx="pop",
             ),
             StoryScene(
                 id="scale",
@@ -77,6 +140,12 @@ def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyb
                 narration="As a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.",
                 visual_prompt="Real AI BotKit and portfolio product interfaces with layered depth and no invented metrics or text.",
                 source_refs=[0, 1],
+                visual_type="screenshot",
+                layout="split",
+                camera="pan_right",
+                animation="parallax",
+                transition="wipe",
+                sfx="whoosh",
             ),
             StoryScene(
                 id="engineering",
@@ -86,6 +155,12 @@ def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyb
                 narration="His work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.",
                 visual_prompt="Real portfolio engineering projects, voice-agent telemetry, and product UI details with no fake dashboards or added copy.",
                 source_refs=[0, 1],
+                visual_type="source_image",
+                layout="bento",
+                camera="pull_out",
+                animation="stagger",
+                transition="whip",
+                sfx="bass_drop",
             ),
             StoryScene(
                 id="takeaway",
@@ -95,6 +170,12 @@ def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyb
                 narration="Mohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
                 visual_prompt="The real Mohd Daniyal portfolio closing view and brand imagery with calm negative space for the separate headline layer.",
                 source_refs=[0],
+                visual_type="source_image",
+                layout="hero",
+                camera="static",
+                animation="clip_reveal",
+                transition="dissolve",
+                sfx="none",
             ),
         ],
         sources=[
@@ -146,20 +227,59 @@ def _fallback_sentence(text: str) -> str:
     return cleaned if cleaned.endswith((".", "!", "?")) else f"{cleaned}."
 
 
-def fallback_storyboard(harvest: HarvestResult, sources: list[SourceCitation], style: str, voice: str) -> Storyboard:
-    title = harvest.title or "Source Story"
-    sentences = [part.strip() for part in harvest.dom_copy.replace("\n", " ").split(".") if part.strip()]
-    first = sentences[0] if sentences else title
-    second = sentences[1] if len(sentences) > 1 else first
-    third = sentences[2] if len(sentences) > 2 else second
-    fourth = sentences[3] if len(sentences) > 3 else third
-    citations = sources or [SourceCitation(url=harvest.source_url, title=title, claim="Primary source supplied by the user")]
-    scenes = [
-        StoryScene(id="hook", start=0, end=2.5, headline=_fallback_headline(first, title), narration=_fallback_sentence(first), visual_prompt=f"Real source imagery for {title}", source_refs=[0]),
-        StoryScene(id="problem", start=2.5, end=12, headline=_fallback_headline(second, "THE CHALLENGE"), narration=_fallback_sentence(second), visual_prompt=f"Editorial source imagery for {title}", source_refs=[0]),
-        StoryScene(id="system", start=12, end=25, headline=_fallback_headline(third, "HOW IT WORKS"), narration=_fallback_sentence(third), visual_prompt=f"Real source interface or supplied images for {title}", source_refs=[0]),
-        StoryScene(id="takeaway", start=25, end=32, headline=_fallback_headline(fourth, "WHY IT MATTERS"), narration=_fallback_sentence(fourth), visual_prompt=f"Cover artwork for {title}", source_refs=[0]),
+def fallback_storyboard(
+    harvest: HarvestResult,
+    sources: list[SourceCitation],
+    style: str,
+    voice: str,
+    research: ResearchReport | None = None,
+) -> Storyboard:
+    title = (research.topic if research and research.topic.strip() else harvest.title) or "Source Story"
+    citations = (research.sources if research and research.sources else sources) or [
+        SourceCitation(url=harvest.source_url, title=title, claim="Primary source supplied by the user")
     ]
+    if research and any(claim.text.strip() for claim in research.claims):
+        entries = [
+            (claim.text, claim.source_refs or [0])
+            for claim in research.claims
+            if claim.text.strip()
+        ][:8]
+        existing = {text for text, _ in entries}
+        sentences = [part.strip() for part in harvest.dom_copy.replace("\n", " ").split(".") if part.strip()]
+        for sentence in sentences:
+            if len(entries) >= 4:
+                break
+            if sentence not in existing:
+                entries.append((sentence, [0]))
+                existing.add(sentence)
+        while len(entries) < 4:
+            entries.append(entries[-1])
+        ids = ("hook", "context", "evidence", "system", "impact", "insight", "application", "takeaway")
+        count = len(entries)
+        scenes = [
+            StoryScene(
+                id=ids[index],
+                start=index * 32 / count,
+                end=(index + 1) * 32 / count,
+                headline=_fallback_headline(text, title),
+                narration=_fallback_sentence(text),
+                visual_prompt=f"Evidence-led editorial imagery for {title}: {text}",
+                source_refs=refs,
+            )
+            for index, (text, refs) in enumerate(entries)
+        ]
+    else:
+        sentences = [part.strip() for part in harvest.dom_copy.replace("\n", " ").split(".") if part.strip()]
+        first = sentences[0] if sentences else title
+        second = sentences[1] if len(sentences) > 1 else first
+        third = sentences[2] if len(sentences) > 2 else second
+        fourth = sentences[3] if len(sentences) > 3 else third
+        scenes = [
+            StoryScene(id="hook", start=0, end=2.5, headline=_fallback_headline(first, title), narration=_fallback_sentence(first), visual_prompt=f"Real source imagery for {title}", source_refs=[0]),
+            StoryScene(id="problem", start=2.5, end=12, headline=_fallback_headline(second, "THE CHALLENGE"), narration=_fallback_sentence(second), visual_prompt=f"Editorial source imagery for {title}", source_refs=[0]),
+            StoryScene(id="system", start=12, end=25, headline=_fallback_headline(third, "HOW IT WORKS"), narration=_fallback_sentence(third), visual_prompt=f"Real source interface or supplied images for {title}", source_refs=[0]),
+            StoryScene(id="takeaway", start=25, end=32, headline=_fallback_headline(fourth, "WHY IT MATTERS"), narration=_fallback_sentence(fourth), visual_prompt=f"Cover artwork for {title}", source_refs=[0]),
+        ]
     return Storyboard(
         title=title,
         style=style,
@@ -172,22 +292,47 @@ def fallback_storyboard(harvest: HarvestResult, sources: list[SourceCitation], s
     )
 
 
-def build_storyboard_prompt(harvest: HarvestResult, sources: list[SourceCitation], style: str, voice: str) -> str:
+def build_storyboard_prompt(
+    harvest: HarvestResult,
+    sources: list[SourceCitation],
+    style: str,
+    voice: str,
+    research: ResearchReport | None = None,
+) -> str:
+    evidence_sources = research.sources if research and research.sources else sources
+    research_section = ""
+    if research:
+        research_payload = {
+            "topic": research.topic,
+            "angle": research.angle,
+            "summary": research.summary,
+            "claims": [
+                {
+                    "text": claim.text,
+                    "source_refs": [ref for ref in claim.source_refs if 0 <= ref < len(research.sources)],
+                }
+                for claim in research.claims
+            ],
+            "sources": [source.model_dump() for source in research.sources],
+        }
+        research_section = f"Research report (claim source_refs index its sources): {json.dumps(research_payload, ensure_ascii=False)}\n"
     return f"""
-Create exactly four sourced scenes for a 30–35 second vertical launch video.
-Required beat arc: 0–2.5s pattern-interrupt hook, 2.5–12s real story/problem from
-DDGS research, 12–25s live product breakdown with 3D browser slabs and Nano Banana
-2.1 visuals, 25–32s high-contrast takeaway. Keep narration spoken and concise.
-Align scene timestamps to 128 BPM and add transition SFX cues whoosh, pop, and
-bass_drop at scene cuts. Headlines must contain at most 42 characters.
+Create 6–8 sourced scenes for a 30–40 second vertical cinematic video.
+Build a researched narrative from the supplied evidence and ResearchReport when present.
+Give narration and concise on-screen text different purposes: narration is spoken;
+the headline is concise on-screen text, never a static full-narration paragraph.
+Use typed shot direction with visual_type, layout, camera, animation, transition, sfx,
+callouts, and metrics. Diagram scenes need at least two callouts; data scenes need
+sourced metrics. Headlines must contain at most 42 characters; every scene must last at least 1.8 seconds.
 Use only the supplied evidence, never prior knowledge or plausible invention.
 Never introduce a platform, technical problem, code filename, integration, metric, customer, or capability absent from that evidence.
 Every scene must cite its supporting evidence in source_refs. If research has no
-external result, tell a primary-source product overview instead of inventing a problem.
+external result, tell a primary-source overview instead of inventing a problem.
 Return title, style, voice, duration 32, bpm 128, scenes with id/start/end/headline/
-narration/visual_prompt/source_refs, sources, and speech_style.
+narration/visual_prompt/source_refs/visual_type/layout/camera/animation/transition/sfx/callouts/metrics,
+sources, and speech_style.
 Primary source ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}\nPalette: {harvest.palette}\nFonts: {harvest.fonts}
-Citations: {[source.model_dump() for source in sources]}
+{research_section}Citations: {json.dumps([source.model_dump() for source in evidence_sources], ensure_ascii=False)}
 Video style: {style}. Voice: {voice}.
 """
 
@@ -305,7 +450,7 @@ Supplied sources: {evidence}
     async def write_storyboard(self, harvest: HarvestResult | None, sources: list[SourceCitation], style: str, voice: str, research: ResearchReport | None = None) -> Storyboard:
         if harvest is None:
             return mock_storyboard(style, voice)
-        prompt = build_storyboard_prompt(harvest, sources, style, voice)
+        prompt = build_storyboard_prompt(harvest, sources, style, voice, research=research)
         config = self._core_config()
         config.response_schema = Storyboard
         contents: list = [prompt]
@@ -325,7 +470,7 @@ Supplied sources: {evidence}
             except Exception:
                 if model == CORE_MODEL:
                     continue
-        return fallback_storyboard(harvest, sources, style, voice)
+        return fallback_storyboard(harvest, sources, style, voice, research=research)
 
     async def _generate_one_visual(self, prompt: str, references: list[Path], path: Path) -> bool:
         try:
