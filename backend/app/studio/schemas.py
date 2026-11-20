@@ -19,6 +19,7 @@ class SourceCitation(BaseModel):
     url: str
     title: str
     claim: str
+    content: str = Field(default="", exclude=True)
 
 
 class SourceBundle(BaseModel):
@@ -33,6 +34,35 @@ class SourceBundle(BaseModel):
     screenshots: list[Path] = Field(default_factory=list, exclude=True)
     scroll_video: Path = Field(exclude=True)
     image_paths: list[Path] = Field(default_factory=list, exclude=True)
+
+
+class ResearchPlan(BaseModel):
+    topic: str
+    angle: str
+    queries: list[str] = Field(min_length=1, max_length=4)
+
+
+class EvidenceClaim(BaseModel):
+    text: str
+    source_refs: list[int]
+
+
+class ResearchReport(BaseModel):
+    topic: str
+    angle: str
+    summary: str
+    claims: list[EvidenceClaim]
+    sources: list[SourceCitation]
+    queries: list[str]
+    external_research: bool
+    provider: str
+
+    @model_validator(mode="after")
+    def valid_claim_references(self):
+        for claim in self.claims:
+            if any(ref < 0 or ref >= len(self.sources) for ref in claim.source_refs):
+                raise ValueError("Claim source_refs must reference the report sources")
+        return self
 
 
 HarvestResult = SourceBundle
