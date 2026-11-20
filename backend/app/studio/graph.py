@@ -65,29 +65,30 @@ async def research_bundle(
     source_url: str,
     project_dir: Path,
     sample: bool = False,
+    style: str = "deep_dive",
 ) -> tuple[HarvestResult, ResearchReport]:
     needs_harvest = bundle is None or requires_web_harvest(bundle)
     if sample:
         harvested = await harvest(source_url, project_dir) if needs_harvest else bundle
-        plan = fallback_research_plan(harvested, "deep_dive")
+        plan = fallback_research_plan(harvested, style)
         return harvested, fallback_research_report(harvested, plan, [])
 
     if needs_harvest and bundle is None:
         harvested = await harvest(source_url, project_dir)
-        plan = await provider.plan_research(harvested, "deep_dive")
+        plan = await provider.plan_research(harvested, style)
         sources = await research_queries(source_url, plan.queries)
         report = await provider.synthesize_research(harvested, plan, sources)
         return harvested, report
 
     if needs_harvest:
         harvest_task = asyncio.create_task(harvest(source_url, project_dir))
-        plan = await provider.plan_research(bundle, "deep_dive")
+        plan = await provider.plan_research(bundle, style)
         research_task = asyncio.create_task(research_queries(source_url, plan.queries))
         primary, sources = await asyncio.gather(harvest_task, research_task)
         harvested = merge_source_bundle(primary, bundle)
     else:
         harvested = bundle
-        plan = await provider.plan_research(bundle, "deep_dive")
+        plan = await provider.plan_research(bundle, style)
         sources = await research_queries(source_url, plan.queries)
     report = await provider.synthesize_research(harvested, plan, sources)
     return harvested, report
@@ -98,7 +99,14 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
         events = state["events"]
         await events.emit("harvester", "running", "Capturing the live page and brand system…", 8)
         await events.emit("researcher", "running", "Finding the story beyond the landing page…", 10)
-        work = research_bundle(provider, state.get("source_bundle"), state["source_url"], state["project_dir"], sample=sample)
+        work = research_bundle(
+            provider,
+            state.get("source_bundle"),
+            state["source_url"],
+            state["project_dir"],
+            sample=sample,
+            style=state["style"],
+        )
         agent = "harvester" if sample else "researcher"
         message = "Capturing the live page and brand system…" if sample else "Finding the story beyond the landing page…"
         progress = 8 if sample else 10

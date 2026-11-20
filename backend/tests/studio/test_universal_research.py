@@ -118,6 +118,7 @@ async def test_text_only_graph_researches_and_synthesizes(monkeypatch, tmp_path)
 
     bundle = ingest_text("Ocean cleanup robots")
     seen = []
+    styles = []
 
     async def fake_queries(url, queries, timeout=10):
         seen.extend(queries)
@@ -125,14 +126,16 @@ async def test_text_only_graph_researches_and_synthesizes(monkeypatch, tmp_path)
 
     class Provider:
         async def plan_research(self, harvest, style):
+            styles.append(style)
             return ResearchPlan(topic=harvest.title, angle="Systems", queries=["ocean cleanup robots"])
 
         async def synthesize_research(self, harvest, plan, sources):
             return fallback_research_report(harvest, plan, sources).model_copy(update={"provider": "gemini"})
 
     monkeypatch.setattr("app.studio.graph.research_queries", fake_queries)
-    harvested, report = await research_bundle(Provider(), bundle, bundle.source_url, tmp_path)
+    harvested, report = await research_bundle(Provider(), bundle, bundle.source_url, tmp_path, style="founder")
     assert seen == ["ocean cleanup robots"]
+    assert styles == ["founder"]
     assert report.provider == "gemini"
     assert report.external_research is True
 
