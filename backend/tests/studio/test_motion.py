@@ -64,14 +64,14 @@ async def motion_geometry(tmp_path: Path, timestamps: list[float]) -> list[dict]
                 await page.evaluate(f"window.seekTo({timestamp})")
                 frames.append(await page.evaluate("""
                     () => {
-                      const scene = [...document.querySelectorAll('.scene')].find(
-                        element => Number(getComputedStyle(element).opacity) > 0.9
-                      );
-                      return Object.fromEntries(['chrome', 'browser', 'headline', 'caption', 'beat'].map(name => {
+                      const scene = document.querySelector('.scene[data-active="true"]');
+                      const regions = Object.fromEntries(['chrome', 'browser', 'headline', 'beat'].map(name => {
                         const rect = scene.querySelector(`.${name}`).getBoundingClientRect();
                         return [name, {left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom,
                           width: rect.width, height: rect.height}];
                       }));
+                      regions.layout = [...scene.classList].find(name => name.startsWith('layout-')).slice(7);
+                      return regions;
                     }
                 """))
             return frames
@@ -84,16 +84,18 @@ async def motion_geometry(tmp_path: Path, timestamps: list[float]) -> list[dict]
 async def test_motion_regions_do_not_overlap(tmp_path: Path):
     frames = await motion_geometry(tmp_path, [0.6, 3.5, 8, 14, 21, 27])
     for frame in frames:
-        assert frame["browser"]["bottom"] <= frame["headline"]["top"]
-        assert frame["headline"]["bottom"] <= frame["caption"]["top"]
-        assert frame["caption"]["bottom"] <= frame["beat"]["top"]
+        if frame["layout"] == "split":
+            assert frame["browser"]["right"] <= frame["headline"]["left"]
+        else:
+            assert frame["browser"]["bottom"] <= frame["headline"]["top"]
+        assert frame["headline"]["bottom"] <= frame["beat"]["top"]
 
 
 @pytest.mark.asyncio
 async def test_critical_text_stays_inside_safe_zone(tmp_path: Path):
     frames = await motion_geometry(tmp_path, [0.6, 3.5, 8, 14, 21, 27])
     for frame in frames:
-        for name in ("chrome", "headline", "caption", "beat"):
+        for name in ("chrome", "headline", "beat"):
             assert frame[name]["top"] >= 160
             assert frame[name]["bottom"] <= 1580
 
@@ -199,7 +201,9 @@ async def test_source_markup_cannot_break_motion_clock_or_inject_html(tmp_path: 
     storyboard = fallback_storyboard(bundle, bundle.citations, "launch", "Fenrir")
     assets = fallback_visuals(storyboard, bundle, tmp_path)
     html = fallback_motion_html(storyboard, assets)
-    assert "\\u003c/script\\u003e" in html
+    assert "Hello </script><img src=x onerror=alert(1)>" not in html
+    assert "&lt;/SCRIPT&gt;" in html
+    assert "&lt;IMG" in html
     await validate_motion_clock(html, tmp_path)
     async with async_playwright() as playwright:
         browser = await playwright.chromium.launch()
@@ -208,6 +212,7 @@ async def test_source_markup_cannot_break_motion_clock_or_inject_html(tmp_path: 
         await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
         await page.evaluate("window.seekTo(0.6)")
         assert await page.locator(".headline img").count() == 0
-        assert "<img" in await page.locator(".caption").first.inner_text()
+        assert "<img" in (await page.locator(".headline").first.inner_text()).lower()
+        assert await page.locator("script").count() == 1
         await browser.close()
         server.close()

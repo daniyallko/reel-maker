@@ -1,11 +1,11 @@
 import asyncio
 import colorsys
-import json
 import re
 from pathlib import Path
 
 from bs4 import BeautifulSoup
 
+from app.studio.cinematic import cinematic_motion_html, inline_script_json
 from app.studio.schemas import Storyboard, StudioAsset
 from app.studio.urls import configure_offline_page, localize_motion_html
 
@@ -67,125 +67,8 @@ def select_brand_accent(palette: list[str]) -> str:
     return best_accent or "#d4a853"
 
 
-def inline_script_json(value) -> str:
-    return json.dumps(value).replace("&", "\\u0026").replace("<", "\\u003c").replace(">", "\\u003e").replace("\u2028", "\\u2028").replace("\u2029", "\\u2029")
-
-
 def fallback_motion_html(storyboard: Storyboard, assets: list[StudioAsset], accent: str = "#d4a853") -> str:
-    if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
-        accent = "#d4a853"
-    scene_data = []
-    for index, scene in enumerate(storyboard.scenes):
-        asset = assets[min(index, len(assets) - 1)]
-        scene_data.append({
-            "start": scene.start,
-            "end": scene.end,
-            "headline": scene.headline,
-            "narration": scene.narration,
-            "image": asset.local_path.as_uri(),
-        })
-    return f"""<!doctype html>
-<html><head><meta charset="utf-8"><style>
-:root {{ --enter:400ms; --exit:200ms; --stagger:60ms; }}
-* {{ box-sizing:border-box; margin:0; padding:0; }}
-body {{ width:1080px; height:1920px; overflow:hidden; background:#05060a; color:#fff; font-family:Arial,Helvetica,sans-serif; }}
-.stage {{ position:relative; width:100%; height:100%; perspective:1400px; background:radial-gradient(circle at 50% 30%,#171b2a,#05060a 70%); }}
-.stage::after {{ content:""; position:absolute; inset:0; pointer-events:none; opacity:.03; background-image:radial-gradient(#fff 1px,transparent 1px); background-size:5px 5px; }}
-.scene {{ position:absolute; inset:0; opacity:0; transform-style:preserve-3d; }}
-.layout-0 {{ --media-x:168px; --media-y:300px; --media-w:744px; --media-h:640px; --headline-y:1040px; --caption-y:1330px; }}
-.layout-1 {{ --media-x:72px; --media-y:480px; --media-w:936px; --media-h:480px; --headline-y:1060px; --caption-y:1340px; }}
-.layout-2 {{ --media-x:300px; --media-y:220px; --media-w:708px; --media-h:650px; --headline-y:1060px; --caption-y:1340px; }}
-.layout-3 {{ --media-x:72px; --media-y:260px; --media-w:936px; --media-h:560px; --headline-y:920px; --caption-y:1240px; }}
-.browser {{ position:absolute; left:var(--media-x); top:var(--media-y); width:var(--media-w); height:var(--media-h); object-fit:cover; border:1px solid #ffffff30; border-radius:22px; box-shadow:0 40px 100px #000b; transform-origin:50% 50%; }}
-.chrome {{ position:absolute; left:72px; top:180px; color:#ffffff70; font:18px monospace; letter-spacing:.18em; }}
-.scene-number {{ position:absolute; right:72px; top:160px; color:#ffffff12; font-size:96px; font-weight:600; line-height:.92; letter-spacing:-.04em; }}
-.headline {{ position:absolute; left:72px; right:72px; top:var(--headline-y); font-size:66px; font-weight:600; line-height:1.06; letter-spacing:-.04em; text-shadow:0 4px 30px #000; }}
-.word {{ display:inline-block; margin-right:.22em; opacity:0; }}
-.caption {{ position:absolute; left:72px; right:72px; top:var(--caption-y); color:#ffffffb0; font-size:24px; line-height:1.45; }}
-.beat {{ position:absolute; left:72px; top:1510px; color:{accent}; font:18px monospace; letter-spacing:.14em; }}
-</style></head><body><div class="stage" id="stage"></div><script>
-const scenes = {inline_script_json(scene_data)};
-const phaseLayouts = [
-  [{{x:168,y:320,w:744,h:600}}, {{x:72,y:340,w:936,h:520}}, {{x:220,y:300,w:640,h:660}}, {{x:72,y:300,w:936,h:600}}],
-  [{{x:72,y:500,w:936,h:420}}, {{x:180,y:340,w:720,h:600}}, {{x:300,y:300,w:500,h:650}}, {{x:72,y:360,w:936,h:560}}],
-  [{{x:300,y:300,w:708,h:560}}, {{x:72,y:360,w:936,h:500}}, {{x:180,y:300,w:720,h:620}}, {{x:72,y:320,w:936,h:540}}],
-  [{{x:72,y:300,w:936,h:520}}, {{x:160,y:320,w:760,h:540}}, {{x:260,y:300,w:560,h:600}}, {{x:72,y:300,w:936,h:520}}]
-];
-const stage = document.getElementById('stage');
-const enterMs = 400, exitMs = 200, staggerMs = 60;
-const easeOut = t => 1 - Math.pow(1 - t, 3);
-const easeIn = t => t * t * t;
-function build() {{
-  scenes.forEach((scene, sceneIndex) => {{
-    const root = document.createElement('section');
-    root.className = `scene layout-${{sceneIndex}}`;
-    const chrome = document.createElement('div');
-    chrome.className = 'chrome';
-    chrome.textContent = `LINK2REEL / SCENE ${{String(sceneIndex + 1).padStart(2,'0')}}`;
-    const number = document.createElement('div');
-    number.className = 'scene-number';
-    number.textContent = `0${{sceneIndex + 1}}`;
-    const image = document.createElement('img');
-    image.className = 'browser';
-    image.src = scene.image;
-    const headline = document.createElement('h1');
-    headline.className = 'headline';
-    scene.headline.split(' ').forEach(word => {{
-      const span = document.createElement('span');
-      span.className = 'word';
-      span.textContent = word;
-      headline.appendChild(span);
-    }});
-    const caption = document.createElement('p');
-    caption.className = 'caption';
-    caption.textContent = scene.narration;
-    const beat = document.createElement('div');
-    beat.className = 'beat';
-    beat.textContent = '128 BPM / 30 FPS';
-    root.append(chrome, number, image, headline, caption, beat);
-    stage.appendChild(root);
-    scene.root = root;
-  }});
-}}
-build();
-window.seekTo = function(t) {{
-  scenes.forEach((scene, index) => {{
-    const duration = scene.end - scene.start;
-    const local = Math.max(0, Math.min(duration, t - scene.start));
-    const enter = Math.min(1, local * 1000 / enterMs);
-    const exit = Math.min(1, (duration - local) * 1000 / exitMs);
-    const active = t >= scene.start && t < scene.end;
-    const enterEase = easeOut(enter);
-    const exitEase = easeIn(exit);
-    const opacity = active ? Math.min(enterEase, exitEase) : 0;
-    const tilt = (1 - enterEase) * (index === 0 ? 58 : 18);
-    const travel = (1 - enterEase) * 140 + (1 - exitEase) * -70;
-    scene.root.style.opacity = opacity;
-    scene.root.style.transform = `translate3d(0,${{travel}}px,0) rotateX(${{tilt}}deg) scale(${{0.88 + enterEase * 0.12}})`;
-    const phaseDuration = 60 / 128 * 5;
-    const phase = Math.min(3, Math.floor(local / phaseDuration));
-    const phaseProgress = Math.min(1, (local % phaseDuration) / phaseDuration);
-    const drift = 1 + phaseProgress * 0.025;
-    const direction = phase % 2 === 0 ? -1 : 1;
-    const frame = phaseLayouts[index][phase];
-    const image = scene.root.querySelector('.browser');
-    image.style.left = `${{frame.x}}px`;
-    image.style.top = `${{frame.y}}px`;
-    image.style.width = `${{frame.w}}px`;
-    image.style.height = `${{frame.h}}px`;
-    image.style.transform = `scale(${{drift}})`;
-    image.style.objectPosition = `${{50 + direction * phase * 8}}% ${{35 + phase * 10}}%`;
-    const words = scene.root.querySelectorAll('.word');
-    words.forEach((word, wordIndex) => {{
-      const wordProgress = Math.max(0, Math.min(1, (local * 1000 - wordIndex * staggerMs) / enterMs));
-      word.style.opacity = easeOut(wordProgress);
-      word.style.clipPath = `inset(${{(1 - easeOut(wordProgress)) * 100}}% 0 0 0)`;
-      word.style.transform = `translateY(${{(1 - easeOut(wordProgress)) * 44}}px)`;
-    }});
-  }});
-}};
-window.seekTo(0);
-</script></body></html>"""
+    return cinematic_motion_html(storyboard, assets, accent)
 
 
 async def validate_motion_clock(html: str, project_dir: Path) -> None:
@@ -212,9 +95,11 @@ async def generate_motion_html(storyboard: Storyboard, assets: list[StudioAsset]
             prompt = f"""
 Write one self-contained HTML/CSS/JS motion scene for 1080x1920 at 30fps.
 Every element must be a deterministic function of t through window.seekTo(t), with no wall-clock timers, setInterval, requestAnimationFrame loops, or CSS transitions.
-Use a Swiss 12-column editorial grid with 72px margins, brand-extracted color tokens, left/grid-aligned headlines, clip-path typography reveals, 3D-tilted real scraped website screenshots, and layered shadows. Keep all critical text/logos/graphics in y:160px–1580px and reserve the bottom caption zone. First 2 seconds: 3D browser slab and clip-path headline wipe plus a rapid metric roll-up. Fresh state
-changes every 1.8–3.0 seconds at 128 BPM. Entrances use cubic ease-out 400ms, exits ease-in 200ms, words stagger 60–100ms. Change the actual media composition between portrait and landscape crops, not just scale. Do not render duplicate headlines inside images. Use the real asset file URLs below,
-never draw fake UI. No external scripts, images, fonts, or network calls.
+Follow each typed scene's visual_type, layout, camera, animation, transition, callouts, and metrics exactly. Add data-scene-id, data-visual-type, and data-critical markers for browser validation.
+Use screenshot assets in dimensional browser frames only for visual_type=screenshot. Use source_image for editorial photo compositions and generated_art for cinematic artwork. Render kinetic_type as procedural typography, diagram as labeled SVG paths, and data as sourced counters and bars. Never turn every subject into a website slab or invent metrics.
+Use a Swiss 12-column editorial grid with 72px margins, brand-extracted color tokens, left/grid-aligned headlines, clip-path typography reveals, and layered shadows. Keep all critical text/logos/graphics in y:160px–1580px and reserve the bottom caption zone. Do not render a static full-narration paragraph.
+First 2 seconds: a directed pattern interrupt with a clip-path headline wipe and a rapid metric roll-up when metrics exist. Introduce a fresh meaningful composition every 1.8–3.0 seconds at 128 BPM. Entrances use cubic ease-out 400ms, exits ease-in 200ms, words stagger 60–100ms. Honor the requested transition and camera. Change actual crops and composition between phases, not just scale. Do not render duplicate headlines inside images.
+Use the real ordered per-scene asset file URLs below. No external scripts, images, fonts, or network calls.
 Brand tokens: {palette or []}
 Storyboard: {storyboard.model_dump_json()}\nAssets: {[asset.local_path.as_uri() for asset in assets]}
 Return only HTML.
