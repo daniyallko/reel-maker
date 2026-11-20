@@ -7,9 +7,9 @@ from langgraph.graph import END, START, StateGraph
 from app.events import EventBus
 from app.studio.harvest import harvest
 from app.studio.motion import fallback_motion_html, generate_motion_html, select_brand_accent
-from app.studio.research import research_url
+from app.studio.research import fallback_research_plan, fallback_research_report, research_queries
 from app.studio.renderer import MotionRenderer, verify_studio_video
-from app.studio.schemas import HarvestResult, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
+from app.studio.schemas import HarvestResult, ResearchReport, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
 from app.studio.vision import MAX_REVISIONS, capture_keyframes, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
 
 
@@ -35,6 +35,7 @@ class StudioState(TypedDict, total=False):
     events: EventBus
     harvest: HarvestResult
     sources: list[SourceCitation]
+    research_report: ResearchReport
     storyboard: Storyboard
     assets: list[StudioAsset]
     visuals: list[StudioAsset]
@@ -58,36 +59,69 @@ def merge_source_bundle(primary: HarvestResult, uploaded: HarvestResult) -> Harv
     })
 
 
+async def research_bundle(
+    provider,
+    bundle: HarvestResult | None,
+    source_url: str,
+    project_dir: Path,
+    sample: bool = False,
+) -> tuple[HarvestResult, ResearchReport]:
+    needs_harvest = bundle is None or requires_web_harvest(bundle)
+    if sample:
+        harvested = await harvest(source_url, project_dir) if needs_harvest else bundle
+        plan = fallback_research_plan(harvested, "deep_dive")
+        return harvested, fallback_research_report(harvested, plan, [])
+
+    if needs_harvest and bundle is None:
+        harvested = await harvest(source_url, project_dir)
+        plan = await provider.plan_research(harvested, "deep_dive")
+        sources = await research_queries(source_url, plan.queries)
+        report = await provider.synthesize_research(harvested, plan, sources)
+        return harvested, report
+
+    if needs_harvest:
+        harvest_task = asyncio.create_task(harvest(source_url, project_dir))
+        plan = await provider.plan_research(bundle, "deep_dive")
+        research_task = asyncio.create_task(research_queries(source_url, plan.queries))
+        primary, sources = await asyncio.gather(harvest_task, research_task)
+        harvested = merge_source_bundle(primary, bundle)
+    else:
+        harvested = bundle
+        plan = await provider.plan_research(bundle, "deep_dive")
+        sources = await research_queries(source_url, plan.queries)
+    report = await provider.synthesize_research(harvested, plan, sources)
+    return harvested, report
+
+
 def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None, sample: bool = False):
     async def research(state: StudioState) -> dict[str, Any]:
         events = state["events"]
-        bundle = state.get("source_bundle")
         await events.emit("harvester", "running", "Capturing the live page and brand system…", 8)
         await events.emit("researcher", "running", "Finding the story beyond the landing page…", 10)
-        if bundle is not None and not requires_web_harvest(bundle):
-            harvested = bundle
-            sources = bundle.citations
-            await events.emit("researcher", "complete", f"{len(sources)} supplied source citations indexed.", 24)
-        elif sample:
-            harvested = await emit_heartbeat(events, "harvester", "Capturing the live page and brand system…", 8, harvest(state["source_url"], state["project_dir"]))
-            sources: list[SourceCitation] = []
-        else:
-            harvested, sources = await asyncio.gather(
-                emit_heartbeat(events, "harvester", "Capturing the live page and brand system…", 8, harvest(state["source_url"], state["project_dir"])),
-                emit_heartbeat(events, "researcher", "Finding the story beyond the landing page…", 10, research_url(state["source_url"], state["source_url"])),
-            )
-        if bundle is not None and requires_web_harvest(bundle):
-            harvested = merge_source_bundle(harvested, bundle)
-            sources = [*sources, *bundle.citations]
+        work = research_bundle(provider, state.get("source_bundle"), state["source_url"], state["project_dir"], sample=sample)
+        agent = "harvester" if sample else "researcher"
+        message = "Capturing the live page and brand system…" if sample else "Finding the story beyond the landing page…"
+        progress = 8 if sample else 10
+        harvested, report = await emit_heartbeat(events, agent, message, progress, work)
         await events.emit("harvester", "complete", f"{len(harvested.assets)} real source assets captured.", 20, assets=harvested.assets)
-        if bundle is None or requires_web_harvest(bundle):
-            await events.emit("researcher", "complete", f"{len(sources)} external sources indexed.", 24)
-        return {"harvest": harvested, "sources": sources, "assets": harvested.assets}
+        await events.emit("researcher", "complete", f"{len(report.sources)} sources synthesized with {report.provider}.", 24)
+        return {
+            "harvest": harvested,
+            "sources": report.sources,
+            "research_report": report,
+            "assets": harvested.assets,
+        }
 
     async def write(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("scriptwriter", "running", "Writing the four-act beat map…", 32)
-        storyboard = await provider.write_storyboard(state["harvest"], state["sources"], state["style"], state["voice"])
+        storyboard = await provider.write_storyboard(
+            state["harvest"],
+            state["sources"],
+            state["style"],
+            state["voice"],
+            research=state["research_report"],
+        )
         await events.emit("scriptwriter", "complete", f"Storyboard locked at {storyboard.duration:.0f} seconds.", 42, payload={"storyboard": storyboard.model_dump()})
         return {"storyboard": storyboard}
 

@@ -11,8 +11,11 @@ from app.media.audio import VOICE
 from app.media.poster import cover
 from app.studio.audio import produce_audio
 from app.studio.harvest import media_url
+from app.studio.research import fallback_research_plan, fallback_research_report
 from app.studio.schemas import (
     HarvestResult,
+    ResearchPlan,
+    ResearchReport,
     SourceCitation,
     Storyboard,
     StoryScene,
@@ -224,7 +227,82 @@ class GeminiStudioProvider:
         )
         return contents, config
 
-    async def write_storyboard(self, harvest: HarvestResult | None, sources: list[SourceCitation], style: str, voice: str) -> Storyboard:
+    @staticmethod
+    def _research_contents(prompt: str, harvest: HarvestResult) -> list:
+        contents: list = [prompt]
+        for image_path in harvest.image_paths[:4]:
+            mime_type = mimetypes.guess_type(image_path.name)[0] or "image/png"
+            contents.append(types.Part.from_bytes(data=image_path.read_bytes(), mime_type=mime_type))
+        return contents
+
+    async def _generate_research_schema(self, contents: list, schema):
+        config = self._core_config()
+        config.response_schema = schema
+        for model in (CORE_MODEL, FALLBACK_MODEL):
+            try:
+                response = await asyncio.wait_for(asyncio.to_thread(
+                    self.client.models.generate_content,
+                    model=model,
+                    contents=contents,
+                    config=config,
+                ), timeout=90)
+                parsed = response.parsed if getattr(response, "parsed", None) else schema.model_validate_json(response.text)
+                return parsed if isinstance(parsed, schema) else schema.model_validate(parsed)
+            except Exception:
+                if model == CORE_MODEL:
+                    continue
+        return None
+
+    async def plan_research(self, harvest: HarvestResult, style: str) -> ResearchPlan:
+        prompt = f"""
+Plan focused external research for the supplied user brief and selected style: {style}.
+Use only the supplied evidence and images to identify the topic and narrative angle.
+Return one to four bounded search queries that seek evidence and context without inventing facts.
+Primary brief ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}
+"""
+        contents = self._research_contents(prompt, harvest)
+        parsed = await self._generate_research_schema(contents, ResearchPlan)
+        return parsed if isinstance(parsed, ResearchPlan) else fallback_research_plan(harvest, style)
+
+    async def synthesize_research(
+        self,
+        harvest: HarvestResult,
+        plan: ResearchPlan,
+        sources: list[SourceCitation],
+    ) -> ResearchReport:
+        fallback = fallback_research_report(harvest, plan, sources)
+        evidence = [
+            {"url": source.url, "title": source.title, "claim": source.claim, "content": source.content}
+            for source in fallback.sources
+        ]
+        prompt = f"""
+Synthesize one evidence-grounded research report using only the supplied evidence and images.
+Do not add facts, sources, quotations, or citations from prior knowledge.
+Keep every claim supported by source_refs indexing the supplied source list.
+Return topic, angle, summary, claims, sources, queries, external_research, and provider.
+Research plan: {plan.model_dump()}
+Primary brief ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}
+Supplied sources: {evidence}
+"""
+        contents = self._research_contents(prompt, harvest)
+        parsed = await self._generate_research_schema(contents, ResearchReport)
+        if not isinstance(parsed, ResearchReport):
+            return fallback
+        try:
+            return ResearchReport(
+                topic=plan.topic,
+                angle=plan.angle,
+                summary=parsed.summary,
+                claims=parsed.claims,
+                sources=fallback.sources,
+                queries=plan.queries,
+                external_research=fallback.external_research,
+                provider="gemini",
+            )
+        except Exception:
+            return fallback
+
+    async def write_storyboard(self, harvest: HarvestResult | None, sources: list[SourceCitation], style: str, voice: str, research: ResearchReport | None = None) -> Storyboard:
         if harvest is None:
             return mock_storyboard(style, voice)
         prompt = build_storyboard_prompt(harvest, sources, style, voice)
@@ -336,7 +414,7 @@ class GeminiStudioProvider:
 
 
 class MockStudioProvider:
-    async def write_storyboard(self, harvest: HarvestResult | None, sources: list[SourceCitation], style: str, voice: str) -> Storyboard:
+    async def write_storyboard(self, harvest: HarvestResult | None, sources: list[SourceCitation], style: str, voice: str, research: ResearchReport | None = None) -> Storyboard:
         return mock_storyboard(style, voice)
 
     async def generate_visuals(self, storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:

@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from app.studio.graph import merge_source_bundle, requires_web_harvest
 from app.studio.schemas import SourceBundle, SourceCitation, StudioAsset
 from app.studio.sources import ingest_text
@@ -43,3 +45,28 @@ def test_url_bundle_merges_uploaded_assets_and_text(tmp_path: Path):
     assert merged.image_paths == [tmp_path / "cv.png"]
     assert merged.citations[0].url == "inline://uploads"
     assert requires_web_harvest(merged) is True
+
+
+@pytest.mark.asyncio
+async def test_sample_research_preserves_replay_without_external_retrieval(monkeypatch, tmp_path):
+    from app.studio.graph import research_bundle
+
+    sample = ingest_text("Sample evidence").model_copy(update={"kind": "sample", "source_url": "https://sample.example"})
+
+    async def fake_harvest(url, project_dir):
+        return sample
+
+    async def unexpected_queries(*args, **kwargs):
+        raise AssertionError("sample replay must not retrieve external research")
+
+    class Provider:
+        async def plan_research(self, harvest, style):
+            raise AssertionError("sample replay must not call Gemini planning")
+
+    monkeypatch.setattr("app.studio.graph.harvest", fake_harvest)
+    monkeypatch.setattr("app.studio.graph.research_queries", unexpected_queries)
+    harvested, report = await research_bundle(Provider(), None, sample.source_url, tmp_path, sample=True)
+    assert harvested == sample
+    assert report.provider == "deterministic"
+    assert report.external_research is False
+    assert report.summary == "Sample evidence"
