@@ -142,6 +142,7 @@ class StudioAudio(BaseModel):
     captions_path: Path = Field(exclude=True)
     preview_url: str
     durations: list[float]
+    segment_paths: list[Path] = Field(default_factory=list, exclude=True)
 
 
 class StudioOutput(BaseModel):

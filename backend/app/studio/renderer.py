@@ -3,6 +3,7 @@ from pathlib import Path
 
 import asyncio
 import hashlib
+import math
 import re
 
 from playwright.async_api import async_playwright
@@ -20,7 +21,7 @@ def frame_count(storyboard: Storyboard, fps: int = 30) -> int:
 
 
 def ass_time(seconds: float) -> str:
-    centiseconds = max(0, round(seconds * 100))
+    centiseconds = max(0, math.floor(seconds * 100))
     hours, remainder = divmod(centiseconds, 360000)
     minutes, remainder = divmod(remainder, 6000)
     seconds, centiseconds = divmod(remainder, 100)
@@ -44,10 +45,11 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
         words = scene.narration.split()
         total_characters = max(1, sum(max(1, len(word)) for word in words))
         cursor = scene.start
-        scene_duration = durations[index] if index < len(durations) else scene.end - scene.start
+        scene_duration = max(0.0, durations[index]) if index < len(durations) else scene.end - scene.start
+        narration_end = min(scene.end, scene.start + scene_duration)
         for word in words:
             duration = scene_duration * max(1, len(word)) / total_characters
-            end = min(scene.end, cursor + duration)
+            end = min(narration_end, cursor + duration)
             lines.append(f"Dialogue: 0,{ass_time(cursor)},{ass_time(end)},Default,,0,0,0,,{word}")
             cursor = end
     output.write_text("\n".join(lines), encoding="utf-8")

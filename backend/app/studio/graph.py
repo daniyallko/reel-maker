@@ -10,6 +10,7 @@ from app.studio.motion import fallback_motion_html, generate_motion_html, select
 from app.studio.research import fallback_research_plan, fallback_research_report, research_queries
 from app.studio.renderer import MotionRenderer, verify_studio_video
 from app.studio.schemas import HarvestResult, ResearchReport, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
+from app.studio.timeline import align_audio_timeline
 from app.studio.vision import MAX_REVISIONS, capture_keyframes, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
 
 
@@ -142,10 +143,20 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
 
     async def audio(state: StudioState) -> dict[str, Any]:
         events = state["events"]
-        await events.emit("voice_studio", "running", "Synthesizing narration and word timings…", 50)
+        await events.emit("voice_studio", "running", "Synthesizing and measuring narration segments…", 50)
         audio = await provider.synthesize(state["storyboard"], state["project_dir"])
-        await events.emit("voice_studio", "complete", "Narration and captions are synced.", 60, payload={"preview_url": audio.preview_url})
         return {"audio": audio}
+
+    async def timing(state: StudioState) -> dict[str, Any]:
+        storyboard, audio = align_audio_timeline(state["storyboard"], state["audio"], state["project_dir"])
+        await state["events"].emit(
+            "voice_studio",
+            "complete",
+            "Narration aligned to scene timings.",
+            60,
+            payload={"preview_url": audio.preview_url},
+        )
+        return {"storyboard": storyboard, "audio": audio}
 
     async def motion(state: StudioState) -> dict[str, Any]:
         events = state["events"]
@@ -222,6 +233,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     graph.add_node("write", write)
     graph.add_node("visuals", visuals)
     graph.add_node("audio", audio)
+    graph.add_node("timing", timing)
     graph.add_node("motion", motion)
     graph.add_node("vision", vision)
     graph.add_node("render", render)
@@ -230,8 +242,9 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     graph.add_edge("research", "write")
     graph.add_edge("write", "visuals")
     graph.add_edge("write", "audio")
-    graph.add_edge("visuals", "motion")
-    graph.add_edge("audio", "motion")
+    graph.add_edge("visuals", "timing")
+    graph.add_edge("audio", "timing")
+    graph.add_edge("timing", "motion")
     graph.add_edge("motion", "vision")
     graph.add_edge("vision", "render")
     graph.add_edge("render", "qa")

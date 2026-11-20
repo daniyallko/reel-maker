@@ -66,4 +66,5 @@ async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None
         captions_path=audio_dir / "captions.ass",
         preview_url=f"/media/{project_dir.name}/audio/narration.wav",
         durations=durations,
+        segment_paths=segment_paths,
     )
