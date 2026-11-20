@@ -1,8 +1,10 @@
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
 from app.studio.research import fallback_research_plan, fallback_research_report, research_queries, research_url
-from app.studio.schemas import EvidenceClaim, ResearchPlan, ResearchReport, SourceCitation
+from app.studio.schemas import EvidenceClaim, ResearchPlan, ResearchReport, SourceBundle, SourceCitation
 from app.studio.sources import ingest_text
 
 
@@ -76,6 +78,29 @@ async def test_url_research_preserves_primary_source_title(monkeypatch):
     sources = await research_url("https://acme.example", "Acme AI", timeout=1)
     assert sources[0].title == "Acme AI"
     assert sources[0].claim == "Primary source supplied by the user"
+
+
+@pytest.mark.asyncio
+async def test_failed_url_research_report_retains_supplied_evidence(monkeypatch):
+    monkeypatch.delenv("FIRECRAWL_API_KEY", raising=False)
+    monkeypatch.setattr("app.studio.research.search_ddgs", lambda query, max_results=2: [])
+    bundle = SourceBundle(
+        kind="url",
+        title="Acme AI",
+        source_url="https://acme.example",
+        dom_copy="Acme robots inspect underwater hulls.",
+        palette=[],
+        fonts=[],
+        assets=[],
+        citations=[],
+        scroll_video=Path(),
+    )
+    plan = fallback_research_plan(bundle, "deep_dive")
+    sources = await research_queries(bundle.source_url, plan.queries, timeout=1)
+    report = fallback_research_report(bundle, plan, sources)
+    assert sources == []
+    assert report.summary == "Acme robots inspect underwater hulls."
+    assert report.external_research is False
 
 
 @pytest.mark.asyncio

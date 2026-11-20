@@ -119,9 +119,7 @@ async def research_queries(url: str, queries: list[str], timeout: float = 10) ->
         citations = _bounded_sources([citation for batch in batches for citation in batch])
     except Exception:
         citations = []
-    if citations or url.startswith("inline://"):
-        return citations
-    return [SourceCitation(url=url, title=url, claim="Primary source supplied by the user")]
+    return citations
 
 
 def fallback_research_plan(bundle: SourceBundle, style: str) -> ResearchPlan:
@@ -175,6 +173,6 @@ async def research_url(url: str, title: str, timeout: float = 10) -> list[Source
         f"{query_title} product launch reviews",
         f"{query_title} founder story",
     ], timeout=timeout)
-    if len(sources) == 1 and sources[0].url == url and sources[0].claim == "Primary source supplied by the user":
-        return [sources[0].model_copy(update={"title": title})]
+    if not sources:
+        return [SourceCitation(url=url, title=title, claim="Primary source supplied by the user")]
     return sources
