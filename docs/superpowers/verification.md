@@ -82,4 +82,5 @@ Therefore external live research, live 6–8-scene topic generation, live asset 
 - The backend process runs under a systemd user scope with `MemoryMax=3221225472` bytes (3 GiB). FFmpeg retains two encoder threads.
 - Output remains within the required 30–40 second container; this sample is exactly 32 seconds.
 - Captions are estimated word events bounded by measured scene narration. Exact word-level TTS synchronization is not claimed.
+- Mixed-source input has a finite combined bound: harvested page copy is capped at 18,000 characters and uploaded source text at 30,000 characters, so the two together can total 48,000 characters. This documents the combined bound; no additional mixed-source enforcement test was required.
 - Live-provider behavior remains unverified in this environment. The regenerated sample is explicitly unreviewed even though its source scenes and cover now use real portfolio captures.

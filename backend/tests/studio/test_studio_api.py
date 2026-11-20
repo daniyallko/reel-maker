@@ -27,12 +27,27 @@ def test_sample_route_uses_mock_mode(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_sample_replay_asset_ids_are_unique():
+async def test_sample_replay_assets_and_telemetry_match_bundle():
     snapshot = await manager.create(sample_site_url(), "launch", "Fenrir", sample=True)
     job = manager.get(snapshot.id)
     await job.task
     ids = [asset.id for asset in job.assets]
     assert len(ids) == len(set(ids))
+    assert len(ids) == 9
+
+    events = {event.agent: event for event in job.events.events}
+    assert events["researcher"].message == "2 citations indexed (1 web, 1 inline)."
+    assert [asset.id for asset in events["harvester"].assets] == ["hero", "mid", "scroll"]
+    assert events["nano_visuals"].message == "5 scene and cover visuals rendered."
+    assert [asset.id for asset in events["nano_visuals"].assets] == [
+        "scene-hook",
+        "scene-scale",
+        "scene-engineering",
+        "scene-takeaway",
+        "thumbnail",
+    ]
+    assert events["voice_studio"].message == "Narration aligned to scene timings; captions are scene-bounded estimates."
+    assert events["vision_director"].message == "7 director stills packaged for offline review."
 
 
 def test_zip_uses_generated_thumbnail_path(tmp_path):

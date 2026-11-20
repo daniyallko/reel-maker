@@ -11,7 +11,7 @@ from app.studio.vision import VisionDirector
 
 
 def test_audit_frame_contains_visible_scene():
-    path = Path(__file__).parents[2] / "assets" / "link2reel" / "sample-output" / "audit" / "frame-1.0.png"
+    path = Path(__file__).parents[2] / "assets" / "link2reel" / "sample-output" / "audit" / "frame-01-1.000.png"
     image = Image.open(path).convert("RGB")
     assert sum(ImageStat.Stat(image).mean) > 60, "Frame is mostly blank"
 

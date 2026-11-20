@@ -112,7 +112,7 @@ class Storyboard(BaseModel):
     style: str
     voice: str
     duration: float = Field(ge=30, le=40)
-    bpm: int = 128
+    bpm: int = Field(default=128, gt=0)
     scenes: list[StoryScene] = Field(min_length=4, max_length=8)
     sources: list[SourceCitation]
     speech_style: str

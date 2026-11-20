@@ -141,7 +141,7 @@ def _callouts(scene: StoryScene) -> str:
     return f'<div class="callout-rail" data-critical>{callouts}</div>'
 
 
-def _scene_html(scene: StoryScene, asset: StudioAsset, index: int) -> tuple[str, dict]:
+def _scene_html(scene: StoryScene, asset: StudioAsset, index: int, bpm: int) -> tuple[str, dict]:
     template = "media"
     if scene.visual_type == "kinetic_type":
         template = "kinetic"
@@ -175,7 +175,7 @@ def _scene_html(scene: StoryScene, asset: StudioAsset, index: int) -> tuple[str,
     {_headline(scene)}
     {_callouts(scene)}
   </div>
-  <div class="beat" data-critical><span></span> 128 BPM / 30 FPS</div>
+  <div class="beat" data-critical><span></span> {bpm} BPM / 30 FPS</div>
 </section>
 """
     data = {
@@ -199,7 +199,7 @@ def cinematic_motion_html(
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", accent):
         accent = "#d4a853"
     rendered = [
-        _scene_html(scene, _asset_for_scene(assets, scene, index), index)
+        _scene_html(scene, _asset_for_scene(assets, scene, index), index, storyboard.bpm)
         for index, scene in enumerate(storyboard.scenes)
     ]
     scene_markup = "".join(item[0] for item in rendered)
@@ -280,9 +280,10 @@ body {{ background:#05060a; color:#f5f3ed; font-family:Arial,Helvetica,sans-seri
 .callout-rail {{ position:absolute; left:72px; top:1370px; width:936px; height:108px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:start; overflow:hidden; }}
 .callout {{ height:44px; min-width:0; padding:12px 16px; overflow:hidden; border:1px solid #ffffff28; color:#ffffffb0; background:#090c14aa; font:16px monospace; letter-spacing:.08em; white-space:nowrap; text-overflow:ellipsis; }}
 .layout-split .callout-rail {{ left:724px; top:1100px; width:284px; height:224px; grid-template-columns:minmax(0,1fr); }}
+.layout-split.template-data .callout-rail {{ left:72px; top:1340px; width:936px; height:108px; grid-template-columns:repeat(2,minmax(0,1fr)); }}
 </style></head><body><main class="stage" id="stage">{scene_markup}</main><script>
 const scenes = {inline_script_json(scene_data)};
-const phaseDuration = 60 / {storyboard.bpm} * 5;
+const phaseDuration = Math.min(3, Math.max(1.8, 60 / {storyboard.bpm} * 5));
 const enterMs = 400, exitMs = 200, staggerMs = 60;
 const frames = {{
   hero: [

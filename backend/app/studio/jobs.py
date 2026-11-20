@@ -16,7 +16,7 @@ from app.studio.renderer import SAMPLE_OUTPUT, MotionRenderer
 from app.studio.schemas import SourceBundle, SourceCitation, StudioAsset, StudioOutput, StudioProjectSnapshot
 from app.studio.sources import ingest_text, ingest_uploads
 from app.studio.urls import validate_public_url
-from app.studio.vision import VisionDirector
+from app.studio.vision import VisionDirector, director_review_times
 from app.studio.vision_providers import build_vision_router
 
 
@@ -215,6 +215,7 @@ class StudioJobManager:
     async def _replay_sample(self, job: StudioJob) -> StudioOutput:
         import json
         payload = json.loads((SAMPLE_OUTPUT / "sample.json").read_text())
+        output = StudioOutput.model_validate(payload["output"])
         assets: list[StudioAsset] = []
         for data in payload["assets"]:
             relative = data["url"].removeprefix("/media/sample-output/")
@@ -222,18 +223,25 @@ class StudioJobManager:
             destination.parent.mkdir(parents=True, exist_ok=True)
             await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / relative, destination)
             assets.append(StudioAsset(**{**data, "url": f"/media/{job.id}/{relative}", "local_path": destination}))
-        await job.events.emit("harvester", "complete", "Portfolio captures and CV evidence loaded.", 20, assets=assets[:3])
         critique_path = job.directory / "audit" / "contact-sheet.png"
         critique_path.parent.mkdir(parents=True, exist_ok=True)
         await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / "audit" / "contact-sheet.png", critique_path)
         if not any(asset.id == "critique" for asset in assets):
             assets.append(StudioAsset(id="critique", kind="critique", label="Director contact sheet", url=f"/media/{job.id}/audit/contact-sheet.png", mime_type="image/png", local_path=critique_path))
-        await job.events.emit("researcher", "complete", "2 external sources indexed.", 24)
-        await job.events.emit("scriptwriter", "complete", "Storyboard locked at 32 seconds.", 42)
-        await job.events.emit("nano_visuals", "complete", "3 vertical assets rendered.", 58, assets=assets[3:6])
-        await job.events.emit("voice_studio", "complete", "Narration and captions are synced.", 60, payload={"preview_url": f"/media/{job.id}/audio/narration.wav"})
+        visual_assets = [asset for asset in assets if asset.id.startswith("scene-") or asset.kind == "thumbnail"]
+        visual_ids = {asset.id for asset in visual_assets}
+        source_assets = [asset for asset in assets if asset.kind != "critique" and asset.id not in visual_ids]
+        critique_assets = [asset for asset in assets if asset.kind == "critique"]
+        web_count = sum(source.url.startswith(("http://", "https://")) for source in output.sources)
+        inline_count = len(output.sources) - web_count
+        review_count = len(director_review_times(output))
+        await job.events.emit("harvester", "complete", "Portfolio captures and CV evidence loaded.", 20, assets=source_assets)
+        await job.events.emit("researcher", "complete", f"{len(output.sources)} citations indexed ({web_count} web, {inline_count} inline).", 24)
+        await job.events.emit("scriptwriter", "complete", f"Storyboard locked at {output.duration:g} seconds.", 42)
+        await job.events.emit("nano_visuals", "complete", f"{len(visual_assets)} scene and cover visuals rendered.", 58, assets=visual_assets)
+        await job.events.emit("voice_studio", "complete", "Narration aligned to scene timings; captions are scene-bounded estimates.", 60, payload={"preview_url": f"/media/{job.id}/audio/narration.wav"})
         await job.events.emit("motion_coder", "complete", "Every frame is locked to seekTo(t).", 72)
-        await job.events.emit("vision_director", "complete", "Six director stills packaged for offline review.", 84, assets=[assets[-1]])
+        await job.events.emit("vision_director", "complete", f"{review_count} director stills packaged for offline review.", 84, assets=critique_assets)
         await job.events.emit("renderer", "running", "Loading the pre-baked 30fps motion reel…", 92)
 
         output_dir = job.directory / "output"
@@ -243,7 +251,7 @@ class StudioJobManager:
         await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / "trailer.mp4", output_dir / "trailer.mp4")
         await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / "visuals" / "thumbnail-03.png", output_dir / "thumbnail.png")
         await asyncio.to_thread(shutil.copy2, SAMPLE_OUTPUT / "audio" / "narration.wav", audio_dir / "narration.wav")
-        output = StudioOutput.model_validate(payload["output"]).model_copy(update={
+        output = output.model_copy(update={
             "trailer_url": f"/media/{job.id}/output/trailer.mp4",
             "thumbnail_url": f"/media/{job.id}/output/thumbnail.png",
             "preview_url": f"/media/{job.id}/audio/narration.wav",

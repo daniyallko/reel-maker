@@ -83,6 +83,40 @@ async def test_every_visual_type_has_a_distinct_template(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_cinematic_renders_actual_storyboard_bpm(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard, assets, _ = await cinematic_page(tmp_path)
+    storyboard = storyboard.model_copy(update={"bpm": 96})
+    html = cinematic_motion_html(storyboard, assets)
+
+    assert html.count("96 BPM / 30 FPS") == len(storyboard.scenes)
+    assert "128 BPM / 30 FPS" not in html
+
+
+@pytest.mark.asyncio
+async def test_cinematic_clamps_phase_duration_to_motion_bounds(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard, assets, _ = await cinematic_page(tmp_path)
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        try:
+            for bpm, expected in ((20, 3.0), (120, 2.5), (1000, 1.8)):
+                page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+                server = await configure_offline_page(page, tmp_path)
+                try:
+                    html = cinematic_motion_html(storyboard.model_copy(update={"bpm": bpm}), assets)
+                    await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+                    assert await page.evaluate("phaseDuration") == expected
+                finally:
+                    await page.close()
+                    server.close()
+        finally:
+            await browser.close()
+
+
+@pytest.mark.asyncio
 async def test_cinematic_scenes_stay_deterministic_and_inside_safe_zones(tmp_path):
     storyboard, assets, html = await cinematic_page(tmp_path)
     async with async_playwright() as playwright:
@@ -316,6 +350,54 @@ async def test_split_procedural_templates_do_not_overlap_headlines(tmp_path):
                         }
                     """)
                     assert separated is True, (scene.id, timestamp)
+        finally:
+            await browser.close()
+            server.close()
+
+
+@pytest.mark.asyncio
+async def test_split_data_callouts_stay_below_maximum_headline_across_phases(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard = directed_storyboard()
+    scenes = [scene.model_copy(deep=True) for scene in storyboard.scenes]
+    scenes[5].headline = "WWWWWWWWWW WWWWWWWWWW WWWWWWWWWW WWWWWWWWW"
+    scenes[5].callouts = ["COLLECTED", "SORTED", "RECYCLED", "REPORTED"]
+    storyboard = storyboard.model_copy(update={"scenes": scenes})
+    assets = await build_scene_visuals(storyboard, ingest_text("Ocean robots"), tmp_path)
+    html = cinematic_motion_html(storyboard, assets)
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        try:
+            await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+            for timestamp in (25.7, 28.2, 30.7, 31.8):
+                await seek_and_settle(page, timestamp)
+                geometry = await page.evaluate("""
+                    () => {
+                      const scene = document.querySelector('.scene[data-active="true"]');
+                      const headline = scene.querySelector('.headline').getBoundingClientRect();
+                      const callouts = [...scene.querySelectorAll('.callout')].map(callout => {
+                        const rect = callout.getBoundingClientRect();
+                        return {top:rect.top, bottom:rect.bottom};
+                      });
+                      return {
+                        sceneId: scene.dataset.sceneId,
+                        phase: scene.dataset.phase,
+                        headlineBottom: headline.bottom,
+                        callouts,
+                      };
+                    }
+                """)
+                assert geometry["sceneId"] == "evidence"
+                assert geometry["callouts"], (timestamp, geometry)
+                assert all(
+                    callout["top"] >= geometry["headlineBottom"]
+                    for callout in geometry["callouts"]
+                ), (timestamp, geometry)
+                assert all(callout["bottom"] <= 1580 for callout in geometry["callouts"])
         finally:
             await browser.close()
             server.close()

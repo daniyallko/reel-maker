@@ -99,6 +99,14 @@ def test_direction_rejects_scene_counts_outside_four_to_eight(scene_count):
         Storyboard.model_validate(payload)
 
 
+@pytest.mark.parametrize("bpm", [0, -1])
+def test_direction_rejects_nonpositive_bpm(bpm):
+    payload = directed_storyboard().model_dump()
+    payload["bpm"] = bpm
+    with pytest.raises(ValidationError):
+        Storyboard.model_validate(payload)
+
+
 def test_direction_rejects_duplicate_scene_ids():
     payload = directed_storyboard().model_dump()
     payload["scenes"][1]["id"] = payload["scenes"][0]["id"]

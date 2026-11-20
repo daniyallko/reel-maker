@@ -431,7 +431,10 @@ Supplied sources: {evidence}
                     config=config,
                 ), timeout=90)
                 parsed = response.parsed if getattr(response, "parsed", None) else Storyboard.model_validate_json(response.text)
-                return parsed if isinstance(parsed, Storyboard) else Storyboard.model_validate(parsed)
+                candidate = Storyboard.model_validate(
+                    parsed.model_dump() if isinstance(parsed, Storyboard) else parsed
+                )
+                return candidate.model_copy(update={"style": style, "voice": voice})
             except Exception:
                 if model == CORE_MODEL:
                     continue
