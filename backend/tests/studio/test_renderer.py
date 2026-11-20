@@ -11,6 +11,7 @@ from app.studio.renderer import (
     write_ass_captions,
 )
 from app.studio.timeline import retime_storyboard
+from tests.studio.directed_fixtures import directed_storyboard
 
 
 def _ass_seconds(timestamp: str) -> float:
@@ -50,6 +51,34 @@ def test_word_level_ass_captions(tmp_path: Path):
             assert end >= start
             assert end <= narration_end
             assert end <= scene.end
+    assert cursor == len(events)
+
+
+def test_caption_events_stay_inside_non_centisecond_scene_bounds(tmp_path: Path):
+    measured = [1.2, 3.5, 2.0, 4.5, 3.0, 2.2]
+    storyboard = retime_storyboard(directed_storyboard(), measured)
+    assert storyboard.scenes[1].start == pytest.approx(2.7375)
+    output = write_ass_captions(storyboard, measured, tmp_path / "captions.ass")
+
+    events = []
+    for line in output.read_text().splitlines():
+        if line.startswith("Dialogue:"):
+            fields = line.split(",", 9)
+            events.append((_ass_seconds(fields[1]), _ass_seconds(fields[2]), fields[9]))
+
+    cursor = 0
+    for index, scene in enumerate(storyboard.scenes):
+        words = scene.narration.split()
+        scene_events = events[cursor:cursor + len(words)]
+        cursor += len(words)
+        assert [event[2] for event in scene_events] == words
+        narration_end = min(scene.end, scene.start + measured[index])
+        for start, end, _word in scene_events:
+            assert start >= scene.start
+            assert end <= narration_end
+            assert end <= scene.end
+            assert start < end
+    assert events[len(storyboard.scenes[0].narration.split())][0] == 2.74
     assert cursor == len(events)
 
 
