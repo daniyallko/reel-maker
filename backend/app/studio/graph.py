@@ -99,7 +99,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def research(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("harvester", "running", "Capturing the live page and brand system…", 8)
-        await events.emit("researcher", "running", "Finding the story beyond the landing page…", 10)
+        await events.emit("researcher", "running", "Researching evidence for the story…", 10)
         work = research_bundle(
             provider,
             state.get("source_bundle"),
@@ -109,7 +109,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
             style=state["style"],
         )
         agent = "harvester" if sample else "researcher"
-        message = "Capturing the live page and brand system…" if sample else "Finding the story beyond the landing page…"
+        message = "Capturing the live page and brand system…" if sample else "Researching evidence for the story…"
         progress = 8 if sample else 10
         harvested, report = await emit_heartbeat(events, agent, message, progress, work)
         await events.emit("harvester", "complete", f"{len(harvested.assets)} real source assets captured.", 20, assets=harvested.assets)
@@ -123,7 +123,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
 
     async def write(state: StudioState) -> dict[str, Any]:
         events = state["events"]
-        await events.emit("scriptwriter", "running", "Writing the four-act beat map…", 32)
+        await events.emit("scriptwriter", "running", "Writing the narrative shot map…", 32)
         storyboard = await provider.write_storyboard(
             state["harvest"],
             state["sources"],
@@ -131,12 +131,12 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
             state["voice"],
             research=state["research_report"],
         )
-        await events.emit("scriptwriter", "complete", f"Storyboard locked at {storyboard.duration:.0f} seconds.", 42, payload={"storyboard": storyboard.model_dump()})
+        await events.emit("scriptwriter", "complete", f"Storyboard locked with {len(storyboard.scenes)} scenes at {storyboard.duration:.0f} seconds.", 42, payload={"storyboard": storyboard.model_dump()})
         return {"storyboard": storyboard}
 
     async def visuals(state: StudioState) -> dict[str, Any]:
         events = state["events"]
-        await events.emit("nano_visuals", "running", "Generating vertical art and the cover…", 48)
+        await events.emit("nano_visuals", "running", "Directing scene assets and the cover…", 48)
         assets = await provider.generate_visuals(state["storyboard"], state["harvest"], state["project_dir"])
         await events.emit("nano_visuals", "complete", f"{len(assets)} vertical assets rendered.", 58, assets=assets)
         return {"visuals": assets, "assets": state["assets"] + assets}

@@ -13,11 +13,11 @@ import { Button } from "./ui";
 
 const AGENTS = [
   ["harvester", "Web Harvester"],
-  ["researcher", "External Story Researcher"],
-  ["scriptwriter", "Viral Scriptwriter"],
-  ["nano_visuals", "Nano Banana Visuals"],
-  ["voice_studio", "Gemini Studio Voice"],
-  ["motion_coder", "Motion Coder"],
+  ["researcher", "Story Researcher"],
+  ["scriptwriter", "Narrative Scriptwriter"],
+  ["nano_visuals", "Scene Asset Director"],
+  ["voice_studio", "Narration Studio"],
+  ["motion_coder", "Motion Director"],
   ["vision_director", "Vision Director"],
   ["renderer", "30fps Renderer"],
   ["qa_critic", "QA Critic"],

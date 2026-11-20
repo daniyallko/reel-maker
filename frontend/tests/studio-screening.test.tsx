@@ -31,7 +31,7 @@ const project: StudioProjectSnapshot = {
       project_id: "telemetry01",
       agent: "researcher",
       status: "running",
-      message: "Finding the story beyond the landing page… (12s)",
+      message: "Researching evidence for the story… (12s)",
       progress: 10,
       timestamp: 1700000004,
       assets: null,
@@ -41,13 +41,37 @@ const project: StudioProjectSnapshot = {
 };
 
 describe("StudioScreening active telemetry", () => {
+  it.each([
+    ["researcher", "Story Researcher"],
+    ["scriptwriter", "Narrative Scriptwriter"],
+    ["nano_visuals", "Scene Asset Director"],
+    ["voice_studio", "Narration Studio"],
+    ["motion_coder", "Motion Director"],
+  ])("uses work-focused stage label %s / %s", (agent, label) => {
+    const currentProject: StudioProjectSnapshot = {
+      ...project,
+      events: [{
+        ...project.events[1],
+        agent,
+        message: agent === "scriptwriter" ? "Writing the narrative shot map…" : "Directing the current production stage…",
+      }],
+    };
+    render(<StudioScreening project={currentProject} connection="live" onRetry={vi.fn()} />);
+    expect(screen.getByText(label)).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: `${label} executing` })).toBeInTheDocument();
+    for (const removed of ["External Story Researcher", "Viral Scriptwriter", "Nano Banana Visuals", "Gemini Studio Voice", "Motion Coder"]) {
+      expect(screen.queryByText(removed)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText(/four-act/i)).not.toBeInTheDocument();
+  });
+
   it("shows only the current backend process", () => {
     render(<StudioScreening project={project} connection="live" onRetry={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "Building your cinematic reel" })).toBeInTheDocument();
     expect(screen.getByText("Example documentary")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "External Story Researcher executing" })).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Story Researcher executing" })).toBeInTheDocument();
     expect(screen.queryByText("Web Harvester")).not.toBeInTheDocument();
-    expect(screen.queryByText("Viral Scriptwriter")).not.toBeInTheDocument();
+    expect(screen.queryByText("Narrative Scriptwriter")).not.toBeInTheDocument();
   });
 
   it("animates to the next active process", async () => {
@@ -59,7 +83,7 @@ describe("StudioScreening active telemetry", () => {
         project_id: "telemetry01",
         agent: "scriptwriter",
         status: "running",
-        message: "Writing the four-act beat map…",
+        message: "Writing the narrative shot map…",
         progress: 32,
         timestamp: 1700000008,
         assets: null,
@@ -67,8 +91,8 @@ describe("StudioScreening active telemetry", () => {
       }],
     };
     rerender(<StudioScreening project={next} connection="live" onRetry={vi.fn()} />);
-    expect(await screen.findByRole("img", { name: "Viral Scriptwriter executing" })).toBeInTheDocument();
-    await waitFor(() => expect(screen.queryByRole("img", { name: "External Story Researcher executing" })).not.toBeInTheDocument());
+    expect(await screen.findByRole("img", { name: "Narrative Scriptwriter executing" })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("img", { name: "Story Researcher executing" })).not.toBeInTheDocument());
   });
 
   it("streams backend responses with technical event metadata", () => {
@@ -78,7 +102,7 @@ describe("StudioScreening active telemetry", () => {
     expect(log).toHaveTextContent("researcher");
     expect(log).toHaveTextContent("RUNNING");
     expect(log).toHaveTextContent("10%");
-    expect(log).toHaveTextContent("Finding the story beyond the landing page… (12s)");
+    expect(log).toHaveTextContent("Researching evidence for the story… (12s)");
     expect(log).toHaveTextContent("UTC");
     expect(log).toHaveTextContent("3 real source assets captured.");
   });

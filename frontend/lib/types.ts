@@ -110,6 +110,14 @@ export interface StoryScene {
   narration: string;
   visual_prompt: string;
   source_refs: number[];
+  visual_type?: "screenshot" | "source_image" | "generated_art" | "kinetic_type" | "diagram" | "data";
+  layout?: "hero" | "split" | "bento" | "full_bleed";
+  camera?: "push_in" | "pull_out" | "pan_left" | "pan_right" | "static";
+  animation?: "clip_reveal" | "stagger" | "counter_roll" | "path_draw" | "parallax";
+  transition?: "cut" | "wipe" | "whip" | "dissolve";
+  sfx?: "whoosh" | "pop" | "bass_drop" | "none";
+  callouts?: string[];
+  metrics?: { label: string; value: number; display: string }[];
 }
 
 export interface SourceCitation {

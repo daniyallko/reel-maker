@@ -19,10 +19,11 @@ export function SceneTimeline({ scenes, currentTime, onSeek }: { scenes: StorySc
             onClick={() => onSeek(scene.start + 0.01)}
             aria-pressed={active?.id === scene.id}
             aria-label={`Seek to ${scene.start.toFixed(1)}s, ${scene.headline}`}
-            className={`min-h-20 rounded-lg border p-2 text-left transition-colors ${active?.id === scene.id ? "border-white bg-white/15" : "border-white/10 bg-black/40 hover:border-white/35"}`}
+            className={`min-h-24 rounded-lg border p-2 text-left transition-colors ${active?.id === scene.id ? "border-white bg-white/15" : "border-white/10 bg-black/40 hover:border-white/35"}`}
           >
             <span className="mono block text-[11px] text-white/45">0{index + 1} / {scene.start.toFixed(1)}s</span>
             <span className="mt-1 block text-[11px] leading-4 text-white">{scene.headline}</span>
+            <span className="mono mt-1 block text-[10px] leading-3 text-white/40">{scene.visual_type ?? "scene"}</span>
           </button>
         ))}
       </div>
