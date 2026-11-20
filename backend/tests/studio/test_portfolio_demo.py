@@ -2,6 +2,8 @@ import json
 import re
 from pathlib import Path
 
+from PIL import Image
+
 from app.studio.providers import portfolio_storyboard
 from app.studio.renderer import SAMPLE_OUTPUT
 from app.studio.schemas import StoryScene, StudioOutput
@@ -58,3 +60,17 @@ def test_bundled_demo_has_typed_direction_and_six_criterion_audit():
     if scores:
         assert len(scores) == 6
         assert set(scores) == REQUIRED_CRITERIA
+
+
+def test_bundled_demo_source_scenes_and_cover_use_real_portfolio_imagery():
+    paths = [
+        SAMPLE_OUTPUT / "visuals" / "scene-02.png",
+        SAMPLE_OUTPUT / "visuals" / "scene-03.png",
+        SAMPLE_OUTPUT / "visuals" / "thumbnail-03.png",
+    ]
+    for path in paths:
+        with Image.open(path) as image:
+            colors = image.convert("RGB").getcolors(maxcolors=1_000_000)
+        assert colors is None or len(colors) > 1_000, f"{path.name} is an abstract procedural fallback"
+    with Image.open(paths[0]) as scene, Image.open(paths[2]) as cover:
+        assert scene.tobytes() != cover.tobytes(), "Cover repeats the engineering scene composition"

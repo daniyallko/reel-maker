@@ -11,7 +11,7 @@ Commands in this Automated verification section ran against this worktree. No li
 ### Sample regeneration
 
 ```bash
-/home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/.venv/bin/python /home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/backend/scripts/prebake_link2reel.py
+cd /home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/backend && ../.venv/bin/python scripts/prebake_link2reel.py
 ```
 
 Result: **PASS**, exit 0. Regenerated `trailer.mp4`, `visuals/thumbnail-03.png`, aligned `audio/narration.wav`, `audio/captions.ass`, `sample.json`, `studio-output.json`, four scene assets, source captures/scroll video, and `audit/contact-sheet.png`.
@@ -24,7 +24,7 @@ Integration fix: the shared virtual environment's editable install points at the
 cd /home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/backend && ../.venv/bin/python -m pytest -q
 ```
 
-Result: **181/181 tests passed** in 53.36s.
+Result: **182/182 tests passed** in 53.57s. This includes the fix-round regression proving scenes 3–4 and the cover use rich, nonprocedural imagery and that the cover differs from the engineering scene. The focused portfolio/visual run passed 11/11 tests in 2.66s.
 
 ```bash
 cd /home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/backend && ../.venv/bin/python -c "from pathlib import Path; from app.studio.renderer import SAMPLE_OUTPUT, verify_studio_video; print(verify_studio_video(SAMPLE_OUTPUT / 'trailer.mp4'))"
@@ -52,7 +52,7 @@ The backend and frontend were started from this worktree on ports 8000 and 3000 
 cd /home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/frontend && node tests/studio-e2e.mjs
 ```
 
-Result: **PASS** — `{"status":"passed","duration":32,"projectId":"e2dc18b6cf5e"}`. Covered four directed sample scenes with retimed third-scene seeking, typed scene labels, citations, portfolio evidence, script-copy feedback, a ZIP response with `PK` signature, 375px mobile overflow checks, reduced-motion video pausing, and browser error collection. Desktop and mobile Premiere screenshots were inspected; neither showed horizontal page overflow. Headless Chromium blocked direct clipboard access and displayed the implemented manual-copy fallback.
+Result: **PASS** — `{"status":"passed","duration":32,"projectId":"e2dc18b6cf5e"}`. Covered four directed sample scenes with retimed third-scene seeking, typed scene labels, citations, portfolio evidence, script-copy feedback, a ZIP response with `PK` signature, 375px mobile overflow checks, reduced-motion video pausing, and browser error collection. Desktop and mobile Premiere screenshots were inspected; neither showed horizontal page overflow. Headless Chromium blocked direct clipboard access and displayed the implemented manual-copy fallback. Fix round 1 changed bundled imagery only, so the browser suite was not rerun.
 
 The sample JSON validates as `StudioOutput`; its download route still supplies MP4, PNG, script, and sources in a ZIP. The multipart input and legacy JSON URL route schemas were not changed.
 
@@ -63,7 +63,7 @@ The sample JSON validates as `StudioOutput`; its download route still supplies M
 - Narration: third person, retaining the source-backed 1,000+ websites, 100,000+ users, sub-500ms first audio, and 99.9% uptime claims.
 - Direction: four cited scenes with explicit visual type, layout, camera, animation, transition, SFX, callouts, and metrics fields. Scenes retimed to 0–2.50234375, 2.50234375–11.98125, 11.98125–24.9934375, and 24.9934375–32 seconds.
 - Review state: **`Unreviewed draft`**. `quality_mode` is `draft`, `review_label` is `Unreviewed draft`, and `critique_scores` is `{}` because no review provider was configured. No AI audit pass is claimed.
-- Contact sheet: seven frames at 0.600, 1.000, 1.251, 7.242, 18.487, 28.497, and 31.500 seconds. Manual inspection found legible headlines and no obvious clipping. The first two scenes use portfolio screenshots. The third and fourth scenes and cover use abstract procedural fallbacks because harvested source imagery was unavailable; the last two compositions are visually similar, so asset relevance and variety remain manual-review concerns.
+- Contact sheet: seven frames at 0.600, 1.000, 1.251, 7.242, 18.487, 28.497, and 31.500 seconds. Manual inspection found legible headlines and no obvious clipping. The first two scenes use portfolio screenshots. The third scene uses a real portfolio hero capture and the fourth uses the real projects/experience capture, both with scene-specific layouts. The cover is a distinct split composition combining the real hero and experience captures rather than an abstract fallback. No AI creative audit pass is claimed.
 - Video: H.264/yuv420p, 1080×1920, 30/1fps, 960 frames, 32.000000s.
 - Audio: AAC, 48 kHz, 32.000000s; measured mean volume -18.2 dB and maximum volume -6.2 dB.
 - Strict technical media QA: valid, no errors. This is separate from the unavailable creative AI audit.
@@ -82,4 +82,4 @@ Therefore external live research, live 6–8-scene topic generation, live asset 
 - The backend process runs under a systemd user scope with `MemoryMax=3221225472` bytes (3 GiB). FFmpeg retains two encoder threads.
 - Output remains within the required 30–40 second container; this sample is exactly 32 seconds.
 - Captions are estimated word events bounded by measured scene narration. Exact word-level TTS synchronization is not claimed.
-- Live-provider behavior remains unverified in this environment. The regenerated sample is explicitly unreviewed, and its final two procedural scenes would benefit from relevant portfolio imagery before using it as a visually polished portfolio showcase.
+- Live-provider behavior remains unverified in this environment. The regenerated sample is explicitly unreviewed even though its source scenes and cover now use real portfolio captures.

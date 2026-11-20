@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import sys
 
+from PIL import Image
+
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
@@ -31,10 +33,17 @@ async def main():
     harvested = merge_source_bundle(harvested, cv_bundle)
     storyboard = portfolio_storyboard()
     provider = GeminiStudioProvider(settings.gemini_api_key or "") if settings.gemini_api_key else MockStudioProvider()
-    generate_art = provider._generate_one_visual if isinstance(provider, GeminiStudioProvider) else None
-    visuals = await build_scene_visuals(storyboard, harvested, SAMPLE_OUTPUT, generate_art)
+    portfolio_visuals = harvested.model_copy(update={
+        "image_paths": [*harvested.screenshots, *harvested.image_paths],
+    })
+    visuals = await build_scene_visuals(storyboard, portfolio_visuals, SAMPLE_OUTPUT)
     legacy_cover = SAMPLE_OUTPUT / "visuals" / "thumbnail-03.png"
     visuals[-1].local_path.replace(legacy_cover)
+    with Image.open(harvested.screenshots[0]) as hero, Image.open(harvested.screenshots[1]) as projects:
+        cover_image = Image.new("RGB", (1080, 1920), "#05060a")
+        cover_image.paste(hero.convert("RGB").crop((0, 0, 1080, 960)), (0, 0))
+        cover_image.paste(projects.convert("RGB").crop((0, 960, 1080, 1920)), (0, 960))
+        cover_image.save(legacy_cover, "PNG", optimize=True)
     visuals[-1] = visuals[-1].model_copy(update={
         "url": "/media/sample-output/visuals/thumbnail-03.png",
         "local_path": legacy_cover,
