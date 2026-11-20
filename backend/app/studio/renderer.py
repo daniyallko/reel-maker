@@ -75,24 +75,42 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
 def build_mix_command(project_dir: Path, storyboard: Storyboard, voice: Path, music: Path, captions: Path, output: Path) -> list[str]:
     frames = project_dir / "frames" / "frame-%06d.png"
     subtitle_path = str(captions).replace(":", "\\:").replace("'", "\\'")
+    sfx_dir = Path(__file__).resolve().parents[2] / "assets" / "music" / "sfx"
+    sfx_files = {
+        "whoosh": ("whoosh.wav", 0.35),
+        "pop": ("pop.wav", 0.35),
+        "bass_drop": ("drop.wav", 0.45),
+    }
+    sfx_inputs = []
+    sfx_input_indexes = {}
+    sfx_filters = []
+    mix_inputs = ["[ducked]", "[vo]"]
+    for scene in storyboard.scenes:
+        if scene.sfx == "none":
+            continue
+        if scene.sfx not in sfx_input_indexes:
+            sfx_input_indexes[scene.sfx] = len(sfx_inputs) + 3
+            sfx_inputs.append(sfx_dir / sfx_files[scene.sfx][0])
+        input_index = sfx_input_indexes[scene.sfx]
+        delay = round(scene.start * 1000)
+        label = f"sfx{len(sfx_filters)}"
+        volume = sfx_files[scene.sfx][1]
+        sfx_filters.append(f"[{input_index}:a]adelay={delay}|{delay},volume={volume}[{label}]")
+        mix_inputs.append(f"[{label}]")
     filter_graph = ";".join([
         f"[1:a]aresample=48000,apad,atrim=0:{storyboard.duration},asplit=2[vo][sc]",
         f"[2:a]aloop=loop=-1:size=48000*22,atrim=0:{storyboard.duration},volume=0.42[music]",
         "[music][sc]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[ducked]",
-        "[3:a]adelay=2500|2500,volume=0.35[whoosh]",
-        "[4:a]adelay=12000|12000,volume=0.35[pop]",
-        "[5:a]adelay=25000|25000,volume=0.45[drop]",
-        "[ducked][vo][whoosh][pop][drop]amix=inputs=5:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]",
+        *sfx_filters,
+        f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]",
         f"[0:v]subtitles='{subtitle_path}'[vout]",
     ])
-    sfx_dir = Path(__file__).resolve().parents[2] / "assets" / "music" / "sfx"
+    sfx_args = [argument for path in sfx_inputs for argument in ("-i", str(path))]
     return [
         "ffmpeg", "-y",
         "-framerate", "30", "-i", str(frames),
         "-i", str(voice), "-i", str(music),
-        "-i", str(sfx_dir / "whoosh.wav"),
-        "-i", str(sfx_dir / "pop.wav"),
-        "-i", str(sfx_dir / "drop.wav"),
+        *sfx_args,
         "-filter_complex_threads", "1", "-filter_complex", filter_graph,
         "-map", "[vout]", "-map", "[aout]",
         "-t", str(storyboard.duration), "-r", "30",

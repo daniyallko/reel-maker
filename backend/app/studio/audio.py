@@ -6,7 +6,18 @@ from app.media.audio import AudioProducer
 from app.media.probe import media_duration
 from app.studio.schemas import Storyboard, StudioAudio
 
-MUSIC = Path(__file__).resolve().parents[2] / "assets" / "music" / "comedy.wav"
+MUSIC_DIR = Path(__file__).resolve().parents[2] / "assets" / "music"
+MUSIC_BY_STYLE = {
+    "launch": "action.wav",
+    "tech_launch": "scifi.wav",
+    "deep_dive": "indie.wav",
+    "founder": "indie.wav",
+    "roast": "comedy.wav",
+}
+
+
+def music_for_style(style: str) -> Path:
+    return MUSIC_DIR / MUSIC_BY_STYLE[style]
 
 
 def _fit_tempo(stream, ratio: float):
@@ -62,7 +73,7 @@ async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None
         )
     return StudioAudio(
         voice_path=voice_path,
-        music_path=MUSIC,
+        music_path=music_for_style(storyboard.style),
         captions_path=audio_dir / "captions.ass",
         preview_url=f"/media/{project_dir.name}/audio/narration.wav",
         durations=durations,

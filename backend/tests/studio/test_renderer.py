@@ -85,7 +85,10 @@ def test_caption_events_stay_inside_non_centisecond_scene_bounds(tmp_path: Path)
 def test_ffmpeg_mix_has_ducking_and_memory_limits(tmp_path: Path):
     storyboard = mock_storyboard("launch", "Fenrir")
     command = build_mix_command(tmp_path, storyboard, tmp_path / "voice.wav", tmp_path / "music.wav", tmp_path / "captions.ass", tmp_path / "trailer.mp4")
-    assert any("sidechaincompress" in part for part in command)
+    graph = next(part for part in command if "sidechaincompress" in part)
+    assert "sidechaincompress" in graph
+    assert "loudnorm=I=-16:TP=-1.5:LRA=11" in graph
+    assert "amix=inputs=5:duration=first:normalize=0" in graph
     assert command[command.index("-threads") + 1] == "2"
     assert command[command.index("-filter_complex_threads") + 1] == "1"
     assert any("whoosh" in part for part in command)
