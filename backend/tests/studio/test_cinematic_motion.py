@@ -4,6 +4,7 @@ import pytest
 from playwright.async_api import async_playwright
 
 from app.studio.sources import ingest_text
+from app.studio.schemas import SceneMetric
 from app.studio.urls import configure_offline_page, localize_motion_html
 from app.studio.visuals import build_scene_visuals
 from tests.studio.directed_fixtures import directed_storyboard
@@ -188,6 +189,194 @@ async def test_callouts_and_metrics_render_as_escaped_text(tmp_path):
             assert await page.locator(".metric-card b, .metric-card svg").count() == 0
             assert await page.locator(".metric-value").inner_text() == "1,200 kg <svg onload=alert(1)>"
             assert "<b>now</b>" in (await page.locator(".metric-label").inner_text()).lower()
+        finally:
+            await browser.close()
+            server.close()
+
+
+@pytest.mark.asyncio
+async def test_maximum_payloads_stay_bounded_across_phases(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard = directed_storyboard()
+    scenes = [scene.model_copy(deep=True) for scene in storyboard.scenes]
+    long_callouts = [f"CALL {index} " + "X" * 500 for index in range(4)]
+    for scene in scenes:
+        scene.callouts = long_callouts.copy()
+    scenes[5].metrics = [
+        SceneMetric(
+            label="LABEL " + "L" * 600,
+            value=1200,
+            display="PREFIX " + "P" * 400 + " 1,200 " + "SUFFIX " + "S" * 400,
+        )
+        for _ in range(3)
+    ]
+    storyboard = storyboard.model_copy(update={"scenes": scenes})
+    assets = await build_scene_visuals(storyboard, ingest_text("Ocean robots"), tmp_path)
+    html = cinematic_motion_html(storyboard, assets)
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        try:
+            await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+            for scene in storyboard.scenes:
+                timestamps = [scene.start + 0.7, scene.end - 0.2]
+                if scene.end - scene.start > 5.8:
+                    timestamps.insert(1, scene.start + 3.2)
+                    timestamps.insert(2, scene.start + 5.6)
+                for timestamp in timestamps:
+                    await seek_and_settle(page, timestamp)
+                    geometry = await page.evaluate("""
+                        () => {
+                          const scene = document.querySelector('.scene[data-active="true"]');
+                          const rect = element => {
+                            const box = element.getBoundingClientRect();
+                            return {left:box.left, top:box.top, right:box.right, bottom:box.bottom};
+                          };
+                          const inside = (child, parent) => {
+                            const a = rect(child), b = rect(parent);
+                            return a.left >= b.left - 2 && a.right <= b.right + 2 &&
+                              a.top >= b.top - 2 && a.bottom <= b.bottom + 2;
+                          };
+                          return {
+                            critical: [...scene.querySelectorAll('[data-critical]')].map(rect),
+                            overflow: document.documentElement.scrollWidth > 1080,
+                            nodeCount: scene.querySelectorAll('.diagram-node[data-critical]').length,
+                            nodesInside: [...scene.querySelectorAll('.diagram-node')].every(node =>
+                              inside(node, scene.querySelector('.diagram-template')) &&
+                              inside(node.querySelector('strong'), node)
+                            ),
+                            metricsInside: [...scene.querySelectorAll('.metric-card')].every(card =>
+                              inside(card, scene.querySelector('.data-template')) &&
+                              inside(card.querySelector('.metric-label'), card) &&
+                              inside(card.querySelector('.metric-value'), card)
+                            ),
+                            calloutsInside: [...scene.querySelectorAll('.callout')].every(callout =>
+                              inside(callout, scene.querySelector('.callout-rail'))
+                            ),
+                            kineticInside: [...scene.querySelectorAll('.kinetic-word')].every(word =>
+                              inside(word, scene.querySelector('.kinetic-template')) &&
+                              getComputedStyle(word).overflow === 'hidden'
+                            ),
+                          };
+                        }
+                    """)
+                    assert geometry["overflow"] is False
+                    for rect in geometry["critical"]:
+                        assert rect["top"] >= 160, (scene.id, timestamp, rect)
+                        assert rect["bottom"] <= 1580, (scene.id, timestamp, rect)
+                        assert rect["left"] >= -2, (scene.id, timestamp, rect)
+                        assert rect["right"] <= 1082, (scene.id, timestamp, rect)
+                    assert geometry["nodesInside"] is True
+                    assert geometry["metricsInside"] is True
+                    assert geometry["calloutsInside"] is True
+                    assert geometry["kineticInside"] is True
+                    if scene.visual_type == "diagram":
+                        assert geometry["nodeCount"] == 4
+        finally:
+            await browser.close()
+            server.close()
+
+
+@pytest.mark.asyncio
+async def test_split_procedural_templates_do_not_overlap_headlines(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard = directed_storyboard()
+    scenes = [scene.model_copy(deep=True) for scene in storyboard.scenes]
+    scenes[3].layout = "split"
+    scenes[4].layout = "split"
+    storyboard = storyboard.model_copy(update={"scenes": scenes})
+    assets = await build_scene_visuals(storyboard, ingest_text("Ocean robots"), tmp_path)
+    html = cinematic_motion_html(storyboard, assets)
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        try:
+            await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+            for index in (3, 4):
+                scene = storyboard.scenes[index]
+                for timestamp in (scene.start + 0.8, scene.start + 3.3, scene.end - 0.2):
+                    await seek_and_settle(page, timestamp)
+                    separated = await page.evaluate("""
+                        () => {
+                          const scene = document.querySelector('.scene[data-active="true"]');
+                          const headline = scene.querySelector('.headline').getBoundingClientRect();
+                          const template = scene.querySelector('.kinetic-template, .diagram-template');
+                          const elements = [template, ...scene.querySelectorAll('.diagram-node')];
+                          return elements.every(element => {
+                            const rect = element.getBoundingClientRect();
+                            return rect.right <= headline.left || rect.left >= headline.right ||
+                              rect.bottom <= headline.top || rect.top >= headline.bottom;
+                          });
+                        }
+                    """)
+                    assert separated is True, (scene.id, timestamp)
+        finally:
+            await browser.close()
+            server.close()
+
+
+@pytest.mark.asyncio
+async def test_counters_animate_the_numeric_display_target(tmp_path):
+    from app.studio.cinematic import cinematic_motion_html
+
+    storyboard = directed_storyboard()
+    scenes = [scene.model_copy(deep=True) for scene in storyboard.scenes]
+    scenes[5].metrics = [
+        SceneMetric(label="Compact", value=1200000, display="1.2M"),
+        SceneMetric(label="Currency", value=999999, display="$1,200.50"),
+        SceneMetric(label="Negative", value=-999, display="-42.5 units"),
+    ]
+    storyboard = storyboard.model_copy(update={"scenes": scenes})
+    assets = await build_scene_visuals(storyboard, ingest_text("Ocean robots"), tmp_path)
+    html = cinematic_motion_html(storyboard, assets)
+
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        try:
+            await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+            data = storyboard.scenes[5]
+            for index, expected in enumerate(("0.8M", "$820.65", "-29.1 units")):
+                await page.evaluate(f"window.seekTo({data.start + 0.35 + index * 0.12})")
+                values = await page.locator('.scene[data-active="true"] .metric-value').all_inner_texts()
+                assert values[index] == expected
+            await page.evaluate(f"window.seekTo({data.end - 0.01})")
+            assert await page.locator('.scene[data-active="true"] .metric-value').all_inner_texts() == [
+                "1.2M", "$1,200.50", "-42.5 units",
+            ]
+        finally:
+            await browser.close()
+            server.close()
+
+
+@pytest.mark.asyncio
+async def test_procedural_primary_geometry_changes_by_phase(tmp_path):
+    _, _, html = await cinematic_page(tmp_path)
+    storyboard = directed_storyboard()
+    cases = ((3, ".kinetic-word"), (4, ".diagram-node"), (5, ".metric-card"))
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, tmp_path)
+        try:
+            await page.set_content(localize_motion_html(html, tmp_path, server.base_url), wait_until="load")
+            for index, selector in cases:
+                scene = storyboard.scenes[index]
+                bounds = []
+                for timestamp in (scene.start + 0.8, scene.start + 3.3):
+                    await seek_and_settle(page, timestamp)
+                    bounds.append(await page.locator(f'.scene[data-active="true"] {selector}').first.evaluate(
+                        "element => { const rect = element.getBoundingClientRect(); return {left:rect.left, top:rect.top, width:rect.width, height:rect.height}; }"
+                    ))
+                changes = [abs(bounds[1][key] - bounds[0][key]) for key in ("left", "top", "width", "height")]
+                assert max(changes) >= 20, (scene.id, bounds)
         finally:
             await browser.close()
             server.close()

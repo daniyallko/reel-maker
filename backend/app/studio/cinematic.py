@@ -71,22 +71,25 @@ def _kinetic(scene: StoryScene) -> str:
 
 def _diagram(scene: StoryScene, scene_index: int) -> str:
     count = len(scene.callouts)
+    width = 600 if scene.layout == "split" else 936
+    center_x = width / 2
+    radius_x = width * 0.32
     positions = []
     for index in range(count):
         angle = -math.pi / 2 + index * math.tau / count
-        positions.append((468 + 300 * math.cos(angle), 270 + 190 * math.sin(angle)))
+        positions.append((center_x + radius_x * math.cos(angle), 270 + 190 * math.sin(angle)))
     coordinates = " ".join(f"{'M' if index == 0 else 'L'} {x:.2f} {y:.2f}" for index, (x, y) in enumerate(positions))
     if count > 2:
         coordinates += " Z"
     nodes = "".join(
-        f'<div class="diagram-node" style="left:{x:.2f}px;top:{y:.2f}px"><span>{index + 1:02d}</span><strong>{html.escape(label)}</strong></div>'
+        f'<div class="diagram-node" data-critical style="left:{x:.2f}px;top:{y:.2f}px"><span>{index + 1:02d}</span><strong>{html.escape(label)}</strong></div>'
         for index, (label, (x, y)) in enumerate(zip(scene.callouts, positions, strict=True))
     )
     return f"""
 <div class="diagram-template" data-critical>
-  <svg class="diagram-svg" viewBox="0 0 936 540" width="936" height="540" aria-hidden="true">
+  <svg class="diagram-svg" viewBox="0 0 {width} 540" width="{width}" height="540" aria-hidden="true">
     <defs><marker id="arrow-{scene_index}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" class="diagram-arrow"></path></marker></defs>
-    <path class="diagram-orbit" d="M 168 270 A 300 190 0 1 1 768 270 A 300 190 0 1 1 168 270"></path>
+    <path class="diagram-orbit" d="M {center_x - radius_x:.2f} 270 A {radius_x:.2f} 190 0 1 1 {center_x + radius_x:.2f} 270 A {radius_x:.2f} 190 0 1 1 {center_x - radius_x:.2f} 270"></path>
     <path class="diagram-path" pathLength="1" marker-end="url(#arrow-{scene_index})" d="{coordinates}"></path>
   </svg>
   {nodes}
@@ -99,9 +102,11 @@ def _metric_parts(metric) -> dict:
     prefix = match.group(1) if match else ""
     suffix = match.group(3) if match else ""
     decimals = len(match.group(2).partition(".")[2]) if match and "." in match.group(2) else 0
+    target = float(match.group(2).replace(",", "")) if match else metric.value
     return {
         "label": metric.label,
         "value": metric.value,
+        "target": target,
         "display": metric.display,
         "prefix": prefix,
         "suffix": suffix,
@@ -112,7 +117,7 @@ def _metric_parts(metric) -> dict:
 def _data(scene: StoryScene) -> str:
     cards = "".join(
         f"""
-<div class="metric-card">
+<div class="metric-card" data-critical>
   <div class="metric-label">{html.escape(metric.label)}</div>
   <div class="metric-value">{html.escape(metric.display)}</div>
   <div class="metric-track"><div class="metric-fill"></div></div>
@@ -132,7 +137,7 @@ def _data(scene: StoryScene) -> str:
 def _callouts(scene: StoryScene) -> str:
     if not scene.callouts or scene.visual_type in {"diagram", "kinetic_type"}:
         return ""
-    callouts = "".join(f'<span class="callout">{html.escape(callout)}</span>' for callout in scene.callouts)
+    callouts = "".join(f'<span class="callout" data-critical>{html.escape(callout)}</span>' for callout in scene.callouts)
     return f'<div class="callout-rail" data-critical>{callouts}</div>'
 
 
@@ -235,6 +240,12 @@ body {{ background:#05060a; color:#f5f3ed; font-family:Arial,Helvetica,sans-seri
 .layout-split .media-shell {{ left:72px; top:330px; width:600px; height:720px; }}
 .layout-split .headline {{ left:724px; top:410px; width:284px; font-size:54px; line-height:1.04; }}
 .layout-split .media-index {{ display:none; }}
+.layout-split.template-kinetic .kinetic-template {{ width:600px; }}
+.layout-split.template-kinetic .kinetic-word {{ max-width:500px; font-size:68px; }}
+.layout-split.template-kinetic .kinetic-word:nth-child(even) {{ margin-left:60px; }}
+.layout-split.template-diagram .diagram-template {{ width:600px; }}
+.layout-split.template-diagram .diagram-node {{ width:160px; }}
+.layout-split.template-data .headline {{ left:72px; top:1040px; width:936px; font-size:66px; }}
 .layout-bento .media-shell {{ left:360px; top:300px; width:648px; height:600px; border-radius:4px 28px 4px 28px; }}
 .layout-bento .headline {{ top:1030px; }}
 .procedural-media {{ opacity:.26; filter:saturate(.7); border-color:#ffffff12; box-shadow:none; }}
@@ -243,32 +254,32 @@ body {{ background:#05060a; color:#f5f3ed; font-family:Arial,Helvetica,sans-seri
 .kinetic-axis {{ position:absolute; left:24px; top:0; bottom:0; width:1px; background:{accent}; }}
 .kinetic-sequence {{ position:absolute; left:52px; top:24px; color:{accent}; font:15px monospace; letter-spacing:.18em; }}
 .kinetic-words {{ position:absolute; left:52px; right:0; top:86px; }}
-.kinetic-word {{ display:block; width:max-content; max-width:850px; color:#f5f3ed; font-size:92px; font-weight:800; line-height:.92; letter-spacing:-.055em; text-transform:uppercase; opacity:0; }}
+.kinetic-word {{ display:block; width:max-content; max-width:850px; color:#f5f3ed; font-size:92px; font-weight:800; line-height:.92; letter-spacing:-.055em; text-transform:uppercase; opacity:0; overflow:hidden; white-space:nowrap; text-overflow:ellipsis; transform-origin:left top; }}
 .kinetic-word:nth-child(even) {{ margin-left:130px; color:transparent; -webkit-text-stroke:1px #ffffffb0; }}
 .kinetic-rule {{ position:absolute; left:52px; right:0; bottom:24px; height:4px; background:#ffffff12; }}
 .kinetic-rule span {{ display:block; height:100%; width:40%; background:{accent}; }}
-.diagram-template {{ position:absolute; left:72px; top:330px; width:936px; height:540px; }}
-.diagram-svg {{ position:absolute; inset:0; overflow:visible; }}
+.diagram-template {{ position:absolute; left:72px; top:330px; width:936px; height:540px; overflow:hidden; }}
+.diagram-svg {{ position:absolute; inset:0; overflow:hidden; }}
 .diagram-orbit {{ fill:none; stroke:#ffffff12; stroke-width:1; stroke-dasharray:4 10; }}
 .diagram-path {{ fill:none; stroke:{accent}; stroke-width:4; stroke-linecap:round; stroke-linejoin:round; stroke-dasharray:1; stroke-dashoffset:1; }}
 .diagram-arrow {{ fill:{accent}; }}
-.diagram-node {{ position:absolute; width:190px; min-height:88px; padding:16px 18px; transform:translate(-50%,-50%); background:#0b0f18f2; border:1px solid #ffffff30; box-shadow:0 16px 40px #0008; }}
+.diagram-node {{ position:absolute; width:190px; height:108px; padding:16px 18px; overflow:hidden; transform:translate(-50%,-50%); background:#0b0f18f2; border:1px solid #ffffff30; box-shadow:0 16px 40px #0008; }}
 .diagram-node span {{ display:block; color:{accent}; font:13px monospace; letter-spacing:.16em; margin-bottom:8px; }}
-.diagram-node strong {{ display:block; font-size:23px; line-height:1.12; overflow-wrap:anywhere; }}
+.diagram-node strong {{ display:-webkit-box; max-height:52px; font-size:23px; line-height:1.12; overflow:hidden; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:2; }}
 .template-diagram .headline,.template-data .headline {{ top:1040px; }}
-.data-template {{ position:absolute; left:72px; top:340px; width:936px; min-height:480px; padding:34px 0 0; border-top:1px solid #ffffff30; }}
+.data-template {{ position:absolute; left:72px; top:340px; width:936px; height:480px; padding:34px 0 0; overflow:hidden; border-top:1px solid #ffffff30; }}
 .data-kicker {{ color:{accent}; font:16px monospace; letter-spacing:.18em; margin-bottom:32px; }}
-.metric-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; }}
-.metric-card {{ min-height:300px; padding:28px; background:#0c1019ee; border:1px solid #ffffff24; box-shadow:0 24px 60px #0007; }}
-.metric-label {{ min-height:44px; color:#ffffffa0; font:16px monospace; letter-spacing:.12em; text-transform:uppercase; overflow-wrap:anywhere; }}
-.metric-value {{ margin-top:22px; color:#f5f3ed; font-size:72px; font-weight:700; line-height:1; letter-spacing:-.045em; overflow-wrap:anywhere; }}
-.metric-track {{ height:6px; margin-top:42px; background:#ffffff12; }}
+.metric-grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:18px; height:320px; }}
+.metric-card {{ height:320px; padding:28px; overflow:hidden; transform-origin:left top; background:#0c1019ee; border:1px solid #ffffff24; box-shadow:0 24px 60px #0007; }}
+.metric-label {{ height:40px; display:-webkit-box; color:#ffffffa0; font:16px monospace; line-height:1.2; letter-spacing:.12em; text-transform:uppercase; overflow:hidden; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:2; }}
+.metric-value {{ height:132px; margin-top:18px; display:-webkit-box; color:#f5f3ed; font-size:64px; font-weight:700; line-height:1.02; letter-spacing:-.045em; overflow:hidden; overflow-wrap:anywhere; -webkit-box-orient:vertical; -webkit-line-clamp:2; }}
+.metric-track {{ height:6px; margin-top:24px; background:#ffffff12; }}
 .metric-fill {{ height:100%; width:0; background:{accent}; }}
 .data-footnote {{ margin-top:28px; color:#ffffff60; font:13px monospace; letter-spacing:.12em; }}
 .data-footnote span {{ display:inline-block; width:7px; height:7px; margin-right:10px; border-radius:50%; background:{accent}; }}
-.callout-rail {{ position:absolute; left:72px; top:1370px; width:936px; display:flex; flex-wrap:wrap; gap:12px; }}
-.callout {{ padding:12px 16px; border:1px solid #ffffff28; color:#ffffffb0; background:#090c14aa; font:16px monospace; letter-spacing:.08em; }}
-.layout-split .callout-rail {{ left:724px; top:1100px; width:284px; }}
+.callout-rail {{ position:absolute; left:72px; top:1370px; width:936px; height:108px; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; align-content:start; overflow:hidden; }}
+.callout {{ height:44px; min-width:0; padding:12px 16px; overflow:hidden; border:1px solid #ffffff28; color:#ffffffb0; background:#090c14aa; font:16px monospace; letter-spacing:.08em; white-space:nowrap; text-overflow:ellipsis; }}
+.layout-split .callout-rail {{ left:724px; top:1100px; width:284px; height:224px; grid-template-columns:minmax(0,1fr); }}
 </style></head><body><main class="stage" id="stage">{scene_markup}</main><script>
 const scenes = {inline_script_json(scene_data)};
 const phaseDuration = 60 / {storyboard.bpm} * 5;
@@ -298,10 +309,16 @@ scenes.forEach((scene, index) => {{
   scene.media = scene.root.querySelector('.media-shell');
   scene.image = scene.root.querySelector('.scene-asset');
   scene.words = [...scene.root.querySelectorAll('.word')];
+  scene.kineticWordRoot = scene.root.querySelector('.kinetic-words');
   scene.kineticWords = [...scene.root.querySelectorAll('.kinetic-word')];
+  scene.diagramTemplate = scene.root.querySelector('.diagram-template');
+  scene.diagramOrbit = scene.root.querySelector('.diagram-orbit');
+  scene.diagramNodes = [...scene.root.querySelectorAll('.diagram-node')].map(node => ({{
+    node, x:parseFloat(node.style.left), y:parseFloat(node.style.top)
+  }}));
   scene.paths = [...scene.root.querySelectorAll('.diagram-path')];
   scene.metricNodes = [...scene.root.querySelectorAll('.metric-card')].map(card => ({{
-    value: card.querySelector('.metric-value'), fill: card.querySelector('.metric-fill')
+    card, value: card.querySelector('.metric-value'), fill: card.querySelector('.metric-fill')
   }}));
   scene.calloutNodes = [...scene.root.querySelectorAll('.callout')];
 }});
@@ -345,6 +362,39 @@ function updateTransition(scene, local, duration, active) {{
   scene.root.style.clipPath = clip;
   scene.root.style.transform = transform;
 }}
+function arrangeDiagram(scene, phase) {{
+  if (!scene.diagramNodes.length) return;
+  const count = scene.diagramNodes.length;
+  const width = scene.diagramTemplate.clientWidth;
+  const arrangement = phase % 4;
+  const positions = scene.diagramNodes.map((entry, index) => {{
+    if (arrangement === 1) {{
+      const margin = scene.layout === 'split' ? 90 : 105;
+      return {{x:count === 1 ? width / 2 : margin + index * (width - margin * 2) / (count - 1), y:270}};
+    }}
+    if (arrangement === 2) {{
+      const offset = scene.layout === 'split' ? 50 : 70;
+      return {{x:width / 2 + (index % 2 ? offset : -offset), y:count === 1 ? 270 : 70 + index * 400 / (count - 1)}};
+    }}
+    if (arrangement === 3) {{
+      const base = scene.diagramNodes[(index + 1) % count];
+      return {{x:base.x, y:base.y}};
+    }}
+    return {{x:entry.x, y:entry.y}};
+  }});
+  scene.diagramNodes.forEach((entry, index) => {{
+    const left = `${{positions[index].x}}px`;
+    const top = `${{positions[index].y}}px`;
+    const opacity = index === phase % count ? '1' : '.78';
+    if (entry.node.style.left !== left) entry.node.style.left = left;
+    if (entry.node.style.top !== top) entry.node.style.top = top;
+    if (entry.node.style.opacity !== opacity) entry.node.style.opacity = opacity;
+  }});
+  const coordinates = positions.map((position, index) => `${{index === 0 ? 'M' : 'L'}} ${{position.x}} ${{position.y}}`).join(' ');
+  const pathData = coordinates + (count > 2 && arrangement !== 1 && arrangement !== 2 ? ' Z' : '');
+  scene.paths.forEach(path => {{ if (path.getAttribute('d') !== pathData) path.setAttribute('d', pathData); }});
+  if (scene.diagramOrbit) scene.diagramOrbit.style.opacity = arrangement === 0 || arrangement === 3 ? 1 : 0;
+}}
 window.seekTo = function(t) {{
   const time = Number.isFinite(t) ? t : 0;
   scenes.forEach((scene, index) => {{
@@ -376,11 +426,21 @@ window.seekTo = function(t) {{
     scene.image.style.objectPosition = `${{50 + (phase % 3 - 1) * 14}}% ${{36 + (phase % 4) * 9}}%`;
     updateHeadline(scene, local);
 
+    if (scene.kineticWordRoot) scene.kineticWordRoot.style.top = `${{[86, 132, 48, 104][phase % 4]}}px`;
     scene.kineticWords.forEach((word, wordIndex) => {{
       const progress = easeOut((local - wordIndex * .08) / .46);
+      const arrangement = phase % 4;
+      const direction = wordIndex % 2 ? -1 : 1;
+      const shift = arrangement === 1 ? direction * (scene.layout === 'split' ? 36 : 60)
+        : arrangement === 3 ? -direction * (scene.layout === 'split' ? 24 : 40) : 0;
+      const compact = scene.kineticWords.length > 4;
+      word.style.fontSize = `${{compact ? (scene.layout === 'split' ? 52 : 64) : (scene.layout === 'split' ? 68 : 92)}}px`;
+      word.style.maxWidth = scene.layout === 'split'
+        ? (wordIndex % 2 ? '400px' : '460px') : (wordIndex % 2 ? '660px' : '760px');
       word.style.opacity = progress;
-      word.style.transform = `translate3d(${{(1 - progress) * 110 + phaseX * (wordIndex % 2 ? -1 : 1)}}px,${{(1 - progress) * 36}}px,0)`;
+      word.style.transform = `translate3d(${{(1 - progress) * 110 + shift}}px,${{(1 - progress) * 36}}px,0)`;
     }});
+    arrangeDiagram(scene, phase);
     scene.paths.forEach((path, pathIndex) => {{
       const progress = easeOut((local - pathIndex * .16) / 1.65);
       path.style.strokeDashoffset = String(1 - progress);
@@ -388,10 +448,18 @@ window.seekTo = function(t) {{
     scene.metricNodes.forEach((nodes, metricIndex) => {{
       const metric = scene.metrics[metricIndex];
       const progress = easeOut((local - metricIndex * .12) / 1.4);
-      const value = metric.value * progress;
+      const value = metric.target * progress;
       const formatted = value.toLocaleString('en-US', {{minimumFractionDigits:metric.decimals, maximumFractionDigits:metric.decimals}});
       nodes.value.textContent = progress >= 1 ? metric.display : `${{metric.prefix}}${{formatted}}${{metric.suffix}}`;
       nodes.fill.style.width = `${{progress * 100}}%`;
+      if (scene.metricNodes.length === 1) {{
+        nodes.card.style.width = `${{[100, 72, 88, 64][phase % 4]}}%`;
+        nodes.card.style.transform = `translate(${{[0, 24, 64, 0][phase % 4]}}px,0) scale(${{[1, .9, .96, .86][phase % 4]}})`;
+      }} else {{
+        const emphasized = metricIndex === phase % scene.metricNodes.length;
+        nodes.card.style.width = '100%';
+        nodes.card.style.transform = `translateY(${{emphasized ? -12 : 12}}px) scale(${{emphasized ? 1 : .94}})`;
+      }}
     }});
     scene.calloutNodes.forEach((callout, calloutIndex) => {{
       const progress = easeOut((local - .25 - calloutIndex * .08) / .4);
