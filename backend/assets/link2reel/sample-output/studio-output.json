@@ -9,49 +9,81 @@
     {
       "id": "hook",
       "start": 0.0,
-      "end": 2.5,
+      "end": 2.50234375,
       "headline": "PRODUCTION AI. REAL IMPACT.",
       "narration": "Mohd Daniyal builds production AI systems that turn complex research into reliable products.",
       "visual_prompt": "A dramatic close crop of the real Mohd Daniyal portfolio interface with no added text.",
       "source_refs": [
         0,
         1
-      ]
+      ],
+      "visual_type": "screenshot",
+      "layout": "full_bleed",
+      "camera": "push_in",
+      "animation": "clip_reveal",
+      "transition": "cut",
+      "sfx": "pop",
+      "callouts": [],
+      "metrics": []
     },
     {
       "id": "scale",
-      "start": 2.5,
-      "end": 12.0,
+      "start": 2.50234375,
+      "end": 11.981250000000001,
       "headline": "AI AT PRODUCTION SCALE",
       "narration": "As a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.",
       "visual_prompt": "Real AI BotKit and portfolio product interfaces with layered depth and no invented metrics or text.",
       "source_refs": [
         0,
         1
-      ]
+      ],
+      "visual_type": "screenshot",
+      "layout": "split",
+      "camera": "pan_right",
+      "animation": "parallax",
+      "transition": "wipe",
+      "sfx": "whoosh",
+      "callouts": [],
+      "metrics": []
     },
     {
       "id": "engineering",
-      "start": 12.0,
-      "end": 25.0,
+      "start": 11.981250000000001,
+      "end": 24.9934375,
       "headline": "AGENTS. RAG. REAL-TIME VOICE.",
       "narration": "His work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.",
       "visual_prompt": "Real portfolio engineering projects, voice-agent telemetry, and product UI details with no fake dashboards or added copy.",
       "source_refs": [
         0,
         1
-      ]
+      ],
+      "visual_type": "source_image",
+      "layout": "bento",
+      "camera": "pull_out",
+      "animation": "stagger",
+      "transition": "whip",
+      "sfx": "bass_drop",
+      "callouts": [],
+      "metrics": []
     },
     {
       "id": "takeaway",
-      "start": 25.0,
+      "start": 24.9934375,
       "end": 32.0,
       "headline": "BUILD WHAT MOVES AI FORWARD",
       "narration": "Mohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
       "visual_prompt": "The real Mohd Daniyal portfolio closing view and brand imagery with calm negative space for the separate headline layer.",
       "source_refs": [
         0
-      ]
+      ],
+      "visual_type": "source_image",
+      "layout": "hero",
+      "camera": "static",
+      "animation": "clip_reveal",
+      "transition": "dissolve",
+      "sfx": "none",
+      "callouts": [],
+      "metrics": []
     }
   ],
   "sources": [

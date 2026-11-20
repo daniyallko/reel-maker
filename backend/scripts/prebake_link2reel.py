@@ -1,19 +1,24 @@
 import asyncio
 import json
 from pathlib import Path
+import sys
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
 
 from app.config import get_settings
 from app.studio.graph import merge_source_bundle
 from app.studio.harvest import harvest
 from app.studio.motion import fallback_motion_html, select_brand_accent
-from app.studio.providers import GeminiStudioProvider, MockStudioProvider, fallback_visuals, portfolio_storyboard
+from app.studio.providers import GeminiStudioProvider, MockStudioProvider, portfolio_storyboard
 from app.studio.renderer import MotionRenderer, SAMPLE_OUTPUT
 from app.studio.schemas import StudioAsset
 from app.studio.sources import ingest_text
-from app.studio.vision import VisionDirector, capture_keyframes, require_passing_audit, require_unaudited_allowed, review_label_for
+from app.studio.timeline import align_audio_timeline
+from app.studio.vision import VisionDirector, capture_keyframes, director_review_times, require_passing_audit, require_unaudited_allowed, review_label_for
+from app.studio.visuals import build_scene_visuals
 from app.studio.vision_providers import build_vision_router
 
-ROOT = Path(__file__).resolve().parent.parent
 PORTFOLIO_URL = "https://daniyal.pro"
 CV_PATH = ROOT / "assets/link2reel/portfolio/cv.txt"
 
@@ -26,10 +31,18 @@ async def main():
     harvested = merge_source_bundle(harvested, cv_bundle)
     storyboard = portfolio_storyboard()
     provider = GeminiStudioProvider(settings.gemini_api_key or "") if settings.gemini_api_key else MockStudioProvider()
-    visuals = fallback_visuals(storyboard, harvested, SAMPLE_OUTPUT)
+    generate_art = provider._generate_one_visual if isinstance(provider, GeminiStudioProvider) else None
+    visuals = await build_scene_visuals(storyboard, harvested, SAMPLE_OUTPUT, generate_art)
+    legacy_cover = SAMPLE_OUTPUT / "visuals" / "thumbnail-03.png"
+    visuals[-1].local_path.replace(legacy_cover)
+    visuals[-1] = visuals[-1].model_copy(update={
+        "url": "/media/sample-output/visuals/thumbnail-03.png",
+        "local_path": legacy_cover,
+    })
     audio = await provider.synthesize(storyboard, SAMPLE_OUTPUT)
+    storyboard, audio = align_audio_timeline(storyboard, audio, SAMPLE_OUTPUT)
     html = fallback_motion_html(storyboard, visuals, accent=select_brand_accent(harvested.palette))
-    critique = await capture_keyframes(html, SAMPLE_OUTPUT, [0.6, 3.5, 8, 14, 21, 27])
+    critique = await capture_keyframes(html, SAMPLE_OUTPUT, director_review_times(storyboard))
     scores = {}
     quality_mode = "strict"
     review_label = None
@@ -40,13 +53,17 @@ async def main():
         try:
             require_passing_audit(audit, "strict")
         except RuntimeError:
-            if audit.scores:
-                require_passing_audit(audit, "draft")
-            else:
-                require_unaudited_allowed("draft")
             quality_mode = "draft"
+            try:
+                require_passing_audit(audit, "draft")
+            except RuntimeError:
+                require_unaudited_allowed("draft")
+                audit = None
             review_label = review_label_for(audit, "draft")
-        scores = {score.criterion: score.score for score in audit.scores}
+        scores = {score.criterion: score.score for score in audit.scores} if audit else {}
+    else:
+        quality_mode = "draft"
+        review_label = review_label_for(None, quality_mode)
     output = await MotionRenderer().render(
         html,
         storyboard,

@@ -36,8 +36,15 @@ try {
   assert.match(await page.locator("main").innerText(), /100,000 users/);
   assert.match(await page.locator("main").innerText(), /500 milliseconds/);
   assert.match(await page.locator("main").innerText(), /99.9 percent uptime/);
-  await page.getByRole("button", { name: /Seek to 12.0s/ }).click();
-  assert(await trailer.evaluate((video) => video.currentTime) >= 12);
+  const sceneButtons = page.getByRole("button", { name: /^Seek to / });
+  const sceneCount = await sceneButtons.count();
+  assert(sceneCount >= 4 && sceneCount <= 8, `Sample has ${sceneCount} scenes`);
+  const thirdScene = sceneButtons.nth(2);
+  const thirdSceneLabel = await thirdScene.getAttribute("aria-label");
+  const thirdSceneStart = Number(thirdSceneLabel.match(/^Seek to ([\d.]+)s/)[1]);
+  await thirdScene.getByText("source_image", { exact: true }).waitFor();
+  await thirdScene.click();
+  assert(await trailer.evaluate((video) => video.currentTime) >= thirdSceneStart - 0.06);
   await page.getByRole("button", { name: "Copy script" }).click();
   await page.getByRole("status").waitFor();
 

@@ -10,49 +10,81 @@
       {
         "id": "hook",
         "start": 0.0,
-        "end": 2.5,
+        "end": 2.50234375,
         "headline": "PRODUCTION AI. REAL IMPACT.",
         "narration": "Mohd Daniyal builds production AI systems that turn complex research into reliable products.",
         "visual_prompt": "A dramatic close crop of the real Mohd Daniyal portfolio interface with no added text.",
         "source_refs": [
           0,
           1
-        ]
+        ],
+        "visual_type": "screenshot",
+        "layout": "full_bleed",
+        "camera": "push_in",
+        "animation": "clip_reveal",
+        "transition": "cut",
+        "sfx": "pop",
+        "callouts": [],
+        "metrics": []
       },
       {
         "id": "scale",
-        "start": 2.5,
-        "end": 12.0,
+        "start": 2.50234375,
+        "end": 11.981250000000001,
         "headline": "AI AT PRODUCTION SCALE",
         "narration": "As a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.",
         "visual_prompt": "Real AI BotKit and portfolio product interfaces with layered depth and no invented metrics or text.",
         "source_refs": [
           0,
           1
-        ]
+        ],
+        "visual_type": "screenshot",
+        "layout": "split",
+        "camera": "pan_right",
+        "animation": "parallax",
+        "transition": "wipe",
+        "sfx": "whoosh",
+        "callouts": [],
+        "metrics": []
       },
       {
         "id": "engineering",
-        "start": 12.0,
-        "end": 25.0,
+        "start": 11.981250000000001,
+        "end": 24.9934375,
         "headline": "AGENTS. RAG. REAL-TIME VOICE.",
         "narration": "His work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.",
         "visual_prompt": "Real portfolio engineering projects, voice-agent telemetry, and product UI details with no fake dashboards or added copy.",
         "source_refs": [
           0,
           1
-        ]
+        ],
+        "visual_type": "source_image",
+        "layout": "bento",
+        "camera": "pull_out",
+        "animation": "stagger",
+        "transition": "whip",
+        "sfx": "bass_drop",
+        "callouts": [],
+        "metrics": []
       },
       {
         "id": "takeaway",
-        "start": 25.0,
+        "start": 24.9934375,
         "end": 32.0,
         "headline": "BUILD WHAT MOVES AI FORWARD",
         "narration": "Mohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
         "visual_prompt": "The real Mohd Daniyal portfolio closing view and brand imagery with calm negative space for the separate headline layer.",
         "source_refs": [
           0
-        ]
+        ],
+        "visual_type": "source_image",
+        "layout": "hero",
+        "camera": "static",
+        "animation": "clip_reveal",
+        "transition": "dissolve",
+        "sfx": "none",
+        "callouts": [],
+        "metrics": []
       }
     ],
     "sources": [
@@ -79,59 +111,66 @@
     {
       "id": "hero",
       "kind": "screenshot",
-      "label": "Portfolio hero capture",
+      "label": "Hero capture",
       "url": "/media/sample-output/harvest/hero.png",
       "mime_type": "image/png"
     },
     {
       "id": "mid",
       "kind": "screenshot",
-      "label": "Portfolio project capture",
+      "label": "Mid-page capture",
       "url": "/media/sample-output/harvest/mid.png",
       "mime_type": "image/png"
     },
     {
-      "id": "page@ea2cb3739398a6197b24476c2a262548",
+      "id": "scroll",
       "kind": "video",
-      "label": "4-second portfolio scroll",
-      "url": "/media/sample-output/video/page@ea2cb3739398a6197b24476c2a262548.webm",
+      "label": "4-second site scroll",
+      "url": "/media/sample-output/video/page@aa0979c79030de5f878486ae4c7a6acf.webm",
       "mime_type": "video/webm"
     },
     {
-      "id": "site-image-1",
+      "id": "scene-hook",
+      "kind": "screenshot",
+      "label": "PRODUCTION AI. REAL IMPACT.",
+      "url": "/media/sample-output/visuals/scene-00.png",
+      "mime_type": "image/png"
+    },
+    {
+      "id": "scene-scale",
+      "kind": "screenshot",
+      "label": "AI AT PRODUCTION SCALE",
+      "url": "/media/sample-output/visuals/scene-01.png",
+      "mime_type": "image/png"
+    },
+    {
+      "id": "scene-engineering",
       "kind": "image",
-      "label": "Portfolio source image 1",
-      "url": "/media/sample-output/harvest/site-image-1.jpg",
-      "mime_type": "image/jpeg"
-    },
-    {
-      "id": "art-1",
-      "kind": "art",
-      "label": "Art 1",
-      "url": "/media/sample-output/visuals/art-01.png",
+      "label": "AGENTS. RAG. REAL-TIME VOICE.",
+      "url": "/media/sample-output/visuals/scene-02.png",
       "mime_type": "image/png"
     },
     {
-      "id": "art-2",
-      "kind": "art",
-      "label": "Art 2",
-      "url": "/media/sample-output/visuals/art-02.png",
+      "id": "scene-takeaway",
+      "kind": "image",
+      "label": "BUILD WHAT MOVES AI FORWARD",
+      "url": "/media/sample-output/visuals/scene-03.png",
       "mime_type": "image/png"
     },
     {
-      "id": "thumbnail-3",
+      "id": "thumbnail",
       "kind": "thumbnail",
-      "label": "Thumbnail 3",
+      "label": "Cover",
       "url": "/media/sample-output/visuals/thumbnail-03.png",
       "mime_type": "image/png"
     },
     {
-      "id": "contact-sheet",
+      "id": "critique",
       "kind": "critique",
       "label": "Director contact sheet",
       "url": "/media/sample-output/audit/contact-sheet.png",
       "mime_type": "image/png"
     }
   ],
-  "critique": "/home/daniyallko/reel-maker/backend/assets/link2reel/sample-output/audit/contact-sheet.png"
+  "critique": "/home/daniyallko/reel-maker/.worktrees/cinematic-research-studio/backend/assets/link2reel/sample-output/audit/contact-sheet.png"
 }
