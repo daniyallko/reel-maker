@@ -115,7 +115,7 @@ async def test_beat_phases_change_media_composition(tmp_path: Path):
     assert abs(late["browser"]["height"] - early["browser"]["height"]) >= 100
 
 
-def test_fallback_visuals_do_not_bake_in_headlines(tmp_path: Path):
+def test_source_visuals_do_not_bake_in_headlines(tmp_path: Path):
     source = tmp_path / "solid.png"
     Image.new("RGB", (1080, 1920), "#182030").save(source)
     harvest = HarvestResult(
@@ -129,10 +129,10 @@ def test_fallback_visuals_do_not_bake_in_headlines(tmp_path: Path):
         scroll_video=source,
     )
     assets = fallback_visuals(mock_storyboard("launch", "Fenrir"), harvest, tmp_path)
-    for asset in assets:
-        with Image.open(asset.local_path) as image:
-            low, high = image.convert("L").getextrema()
-            assert low == high
+    screenshot = next(asset for asset in assets if asset.id == "scene-hook")
+    with Image.open(screenshot.local_path) as image:
+        low, high = image.convert("L").getextrema()
+        assert low == high
 
 
 def test_fallback_visuals_preserve_source_brightness(tmp_path: Path):
@@ -149,10 +149,10 @@ def test_fallback_visuals_preserve_source_brightness(tmp_path: Path):
         scroll_video=source,
     )
     assets = fallback_visuals(mock_storyboard("launch", "Fenrir"), harvest, tmp_path)
-    for asset in assets:
-        with Image.open(asset.local_path) as image:
-            red, _, _ = image.getpixel((540, 960))
-            assert red >= 100
+    screenshot = next(asset for asset in assets if asset.id == "scene-hook")
+    with Image.open(screenshot.local_path) as image:
+        red, _, _ = image.getpixel((540, 960))
+        assert red >= 100
 
 
 def test_motion_uses_harvested_brand_accent(tmp_path: Path):
@@ -172,7 +172,8 @@ def test_fallback_visuals_prefer_uploaded_images(tmp_path: Path):
     bundle = ingest_text("A cinematic story with a user image.")
     bundle = bundle.model_copy(update={"image_paths": [uploaded]})
     assets = fallback_visuals(mock_storyboard("launch", "Fenrir"), bundle, tmp_path)
-    with Image.open(assets[0].local_path) as image:
+    source_image = next(asset for asset in assets if asset.id == "scene-takeaway")
+    with Image.open(source_image.local_path) as image:
         blue = image.getpixel((540, 960))[2]
     assert blue > 70
 

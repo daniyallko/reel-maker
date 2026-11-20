@@ -4,14 +4,11 @@ import mimetypes
 import tempfile
 from pathlib import Path
 
-from PIL import Image, ImageDraw
 from google import genai
 from google.genai import types
 
 from app.media.audio import VOICE
-from app.media.poster import cover
 from app.studio.audio import produce_audio
-from app.studio.harvest import media_url
 from app.studio.research import fallback_research_plan, fallback_research_report
 from app.studio.schemas import (
     HarvestResult,
@@ -23,6 +20,7 @@ from app.studio.schemas import (
     StudioAsset,
     StudioAudio,
 )
+from app.studio.visuals import build_fallback_visuals, build_scene_visuals, build_visual_prompt
 
 CORE_MODEL = "gemini-4-hydrogen"
 VISUAL_MODEL = "gemini-nano-banana-2.1"
@@ -187,32 +185,7 @@ def portfolio_storyboard(style: str = "launch", voice: str = "Fenrir") -> Storyb
 
 
 def fallback_visuals(storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
-    output = project_dir / "visuals"
-    output.mkdir(parents=True, exist_ok=True)
-    if harvest:
-        source_paths = [*harvest.image_paths, *harvest.screenshots]
-    else:
-        source_paths = [Path(__file__).resolve().parents[2] / "assets" / "link2reel" / "sample-site" / "orbit-hero.jpg"]
-    assets: list[StudioAsset] = []
-    for index, kind in enumerate(("art", "art", "thumbnail"), start=1):
-        if source_paths:
-            source_path = source_paths[(index - 1) % len(source_paths)]
-            image = Image.open(source_path).convert("RGB")
-            canvas = cover(image, (1080, 1920), focus_y=0.25 + index * 0.12).convert("RGBA")
-        else:
-            canvas = Image.new("RGBA", (1080, 1920), (5, 6, 10, 255))
-            draw = ImageDraw.Draw(canvas)
-            accent = (94, 106, 210, 180)
-            for line in range(7):
-                y = 260 + line * 190 + index * 36
-                draw.line((72, y, 1008 - line * 72, y - 120), fill=accent, width=3)
-            draw.rectangle((72 + index * 36, 300, 620 + index * 36, 980), outline=(255, 255, 255, 45), width=2)
-        shade = Image.new("RGBA", canvas.size, (4, 6, 14, 30))
-        canvas = Image.alpha_composite(canvas, shade)
-        path = output / f"{kind}-{index:02d}.png"
-        canvas.convert("RGB").save(path, "PNG", optimize=True)
-        assets.append(StudioAsset(id=f"{kind}-{index}", kind=kind, label=f"{kind.title()} {index}", url=media_url(project_dir, path), mime_type="image/png", local_path=path))
-    return assets
+    return build_fallback_visuals(storyboard, harvest, project_dir)
 
 
 def _fallback_headline(text: str, fallback: str) -> str:
@@ -334,14 +307,6 @@ sources, and speech_style.
 Primary source ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}\nPalette: {harvest.palette}\nFonts: {harvest.fonts}
 {research_section}Citations: {json.dumps([source.model_dump() for source in evidence_sources], ensure_ascii=False)}
 Video style: {style}. Voice: {voice}.
-"""
-
-
-def build_visual_prompt(prompt: str) -> str:
-    return f"""{prompt}
-Do not render words, headlines, captions, letters, numbers, or fake UI copy.
-Leave calm negative space for a separate motion typography layer. Use the supplied
-screenshots only as brand, material, lighting, and product-interface references.
 """
 
 
@@ -494,19 +459,7 @@ Supplied sources: {evidence}
         return False
 
     async def generate_visuals(self, storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
-        output = project_dir / "visuals"
-        output.mkdir(parents=True, exist_ok=True)
-        references = [*harvest.image_paths, *harvest.screenshots] if harvest else []
-        prompts = [build_visual_prompt(scene.visual_prompt) for scene in storyboard.scenes[1:3]] + [build_visual_prompt(f"Vertical cover artwork for {storyboard.title}")]
-        generated: list[StudioAsset] = []
-        for index, prompt in enumerate(prompts, start=1):
-            path = output / f"visual-{index:02d}.png"
-            success = await self._generate_one_visual(prompt, references, path)
-            if not success:
-                return await asyncio.to_thread(fallback_visuals, storyboard, harvest, project_dir)
-            kind = "thumbnail" if index == 3 else "art"
-            generated.append(StudioAsset(id=f"{kind}-{index}", kind=kind, label=f"{kind.title()} {index}", url=media_url(project_dir, path), mime_type="image/png", local_path=path))
-        return generated
+        return await build_scene_visuals(storyboard, harvest, project_dir, self._generate_one_visual)
 
     async def _synthesize_line(self, transcript: str, voice: str, style: str) -> bytes | None:
         contents, config = self._tts_request(transcript, voice, style)
@@ -563,7 +516,7 @@ class MockStudioProvider:
         return mock_storyboard(style, voice)
 
     async def generate_visuals(self, storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
-        return await asyncio.to_thread(fallback_visuals, storyboard, harvest, project_dir)
+        return await build_scene_visuals(storyboard, harvest, project_dir)
 
     async def synthesize(self, storyboard: Storyboard, project_dir: Path) -> StudioAudio:
         return await produce_audio(storyboard, project_dir)
