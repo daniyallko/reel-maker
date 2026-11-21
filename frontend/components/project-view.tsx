@@ -2,7 +2,6 @@
 
 import { AnimatePresence, motion } from "motion/react";
 import { useMotionPreference as useReducedMotion } from "@/lib/use-motion-preference";
-import { AppHeader } from "./app-header";
 import { StudioPremiere } from "./studio-premiere";
 import { StudioScreening } from "./studio-screening";
 import { useProjectEvents } from "@/lib/use-project-events";
@@ -10,15 +9,9 @@ import { useProjectEvents } from "@/lib/use-project-events";
 export function ProjectView({ id }: { id: string }) {
   const { snapshot, error, connection, retry } = useProjectEvents(id);
   const reduceMotion = Boolean(useReducedMotion());
-  const status = snapshot?.status === "complete" ? "PREMIERE" : "SCREENING ROOM";
 
   return (
     <div className="min-h-dvh">
-      <AppHeader
-        projectId={id}
-        status={status}
-        navItems={snapshot?.output ? [{ label: "Script", target: "script-title" }, { label: "Scenes", target: "scene-timeline" }] : [{ label: "Assets", target: "source-assets" }, { label: "Agents", target: "agent-telemetry" }]}
-      />
       <AnimatePresence mode="wait">
         <motion.main
           id="main-content"

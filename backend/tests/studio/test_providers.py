@@ -9,7 +9,8 @@ from app.studio.providers import (
     GeminiStudioProvider,
     MockStudioProvider,
 )
-from app.studio.schemas import HarvestResult, SourceCitation
+from app.studio.schemas import HarvestResult, SourceBundle, SourceCitation
+from app.studio.sources import ingest_text
 from app.studio.urls import sample_site_url
 
 
@@ -102,3 +103,145 @@ async def test_partial_gemini_tts_falls_back_to_one_consistent_edge_voice(tmp_pa
     monkeypatch.setattr("app.studio.providers.produce_audio", fake_produce)
     result = await provider.synthesize(storyboard, tmp_path)
     assert result == [b"edge", b"edge", b"edge", b"edge"]
+
+
+def test_text_storyboard_uses_user_evidence_and_inline_citations():
+    from app.studio.providers import fallback_storyboard
+
+    bundle = ingest_text("A rehabilitation robot helps patients walk safely.")
+    storyboard = fallback_storyboard(bundle, bundle.citations, "cinematic", "Fenrir")
+    assert "rehabilitation robot" in storyboard.title
+    assert "Orbit" not in storyboard.title
+    assert storyboard.sources[0].url == "inline://text"
+    assert storyboard.sources[0].claim.startswith("A rehabilitation robot")
+
+
+def test_fallback_storyboard_avoids_generic_template_narration():
+    from app.studio.providers import fallback_storyboard
+
+    bundle = ingest_text("Ocean robots collect plastic. They map currents. Their batteries recharge at sea. Fleets coordinate cleanup.")
+    storyboard = fallback_storyboard(bundle, bundle.citations, "deep_dive", "Fenrir")
+    script = " ".join(scene.narration for scene in storyboard.scenes)
+    assert "This is" not in script
+    assert "Behind the landing page" not in script
+    assert "The takeaway is simple" not in script
+    assert "They map currents" in script
+    assert "Their batteries recharge at sea" in script
+    assert all(len(scene.headline) <= 42 for scene in storyboard.scenes)
+
+
+@pytest.mark.asyncio
+async def test_gemini_storyboard_preserves_requested_style_voice_and_valid_bpm():
+    from app.studio.audio import music_for_style
+    from app.studio.providers import mock_storyboard
+
+    bundle = ingest_text("Ocean robots")
+    model_storyboard = mock_storyboard("Tech Launch", "ModelVoice").model_copy(update={"bpm": 96})
+    provider = GeminiStudioProvider("key")
+
+    class Models:
+        @staticmethod
+        def generate_content(**_kwargs):
+            return type("Response", (), {"parsed": model_storyboard})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    storyboard = await provider.write_storyboard(bundle, bundle.citations, "tech_launch", "Aoede")
+
+    assert storyboard.style == "tech_launch"
+    assert storyboard.voice == "Aoede"
+    assert storyboard.bpm == 96
+    assert music_for_style(storyboard.style).name == "scifi.wav"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bpm", [0, -120])
+async def test_gemini_storyboard_rejects_invalid_model_bpm(bpm):
+    from app.studio.providers import mock_storyboard
+
+    bundle = ingest_text("Ocean robots")
+    payload = mock_storyboard("Tech Launch", "ModelVoice").model_dump()
+    payload["bpm"] = bpm
+    provider = GeminiStudioProvider("key")
+    calls = []
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            calls.append(kwargs["model"])
+            return type("Response", (), {"parsed": payload})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    storyboard = await provider.write_storyboard(bundle, bundle.citations, "tech_launch", "Aoede")
+
+    assert storyboard.bpm == 128
+    assert storyboard.style == "tech_launch"
+    assert storyboard.voice == "Aoede"
+    assert calls == [CORE_MODEL, "gemini-3.5-flash-lite"]
+
+
+@pytest.mark.asyncio
+async def test_storyboard_receives_uploaded_image_evidence(tmp_path: Path):
+    from PIL import Image
+    from app.studio.providers import mock_storyboard
+
+    image_path = tmp_path / "evidence.png"
+    Image.new("RGB", (32, 48), "#182030").save(image_path)
+    bundle = ingest_text("1 source image: evidence.png").model_copy(update={"image_paths": [image_path]})
+    provider = GeminiStudioProvider("key")
+    captured = {}
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"parsed": mock_storyboard("launch", "Fenrir")})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    await provider.write_storyboard(bundle, bundle.citations, "launch", "Fenrir")
+    contents = captured["contents"]
+    assert isinstance(contents, list)
+    assert any(getattr(part, "inline_data", None) for part in contents[1:])
+
+
+@pytest.mark.asyncio
+async def test_gemini_storyboard_request_contains_supplied_research_without_source_content():
+    from app.studio.providers import mock_storyboard
+    from app.studio.schemas import EvidenceClaim, ResearchReport
+
+    bundle = ingest_text("Ocean robots")
+    research = ResearchReport(
+        topic="Autonomous ocean cleanup",
+        angle="From collection to recycling",
+        summary="A sourced account of the complete cleanup cycle.",
+        claims=[EvidenceClaim(text="Robots collect floating plastic.", source_refs=[0])],
+        sources=[
+            SourceCitation(
+                url="https://example.com/cleanup-evidence",
+                title="Cleanup field report",
+                claim="Robots collect floating plastic.",
+                content="PRIVATE_RETRIEVED_SOURCE_CONTENT",
+            )
+        ],
+        queries=["ocean cleanup robots"],
+        external_research=True,
+        provider="gemini",
+    )
+    provider = GeminiStudioProvider("key")
+    captured = {}
+
+    class Models:
+        @staticmethod
+        def generate_content(**kwargs):
+            captured.update(kwargs)
+            return type("Response", (), {"parsed": mock_storyboard("deep_dive", "Fenrir")})()
+
+    provider.client = type("Client", (), {"models": Models})()
+    await provider.write_storyboard(bundle, bundle.citations, "deep_dive", "Fenrir", research=research)
+    prompt = captured["contents"][0]
+    assert "Autonomous ocean cleanup" in prompt
+    assert "From collection to recycling" in prompt
+    assert "A sourced account of the complete cleanup cycle." in prompt
+    assert "Robots collect floating plastic." in prompt
+    assert '"source_refs": [0]' in prompt
+    assert "https://example.com/cleanup-evidence" in prompt
+    assert "PRIVATE_RETRIEVED_SOURCE_CONTENT" not in prompt

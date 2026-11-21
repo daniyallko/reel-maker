@@ -3,6 +3,7 @@ from pathlib import Path
 
 import asyncio
 import hashlib
+import math
 import re
 
 from playwright.async_api import async_playwright
@@ -20,7 +21,10 @@ def frame_count(storyboard: Storyboard, fps: int = 30) -> int:
 
 
 def ass_time(seconds: float) -> str:
-    centiseconds = max(0, round(seconds * 100))
+    return _ass_time_from_centiseconds(max(0, round(seconds * 100)))
+
+
+def _ass_time_from_centiseconds(centiseconds: int) -> str:
     hours, remainder = divmod(centiseconds, 360000)
     minutes, remainder = divmod(remainder, 6000)
     seconds, centiseconds = divmod(remainder, 100)
@@ -44,11 +48,25 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
         words = scene.narration.split()
         total_characters = max(1, sum(max(1, len(word)) for word in words))
         cursor = scene.start
-        scene_duration = durations[index] if index < len(durations) else scene.end - scene.start
+        scene_duration = max(0.0, durations[index]) if index < len(durations) else scene.end - scene.start
+        narration_end = min(scene.end, scene.start + scene_duration)
+        scene_start_cs = max(0, math.ceil(scene.start * 100 - 1e-9))
+        narration_end_cs = max(scene_start_cs, math.floor(narration_end * 100 + 1e-9))
         for word in words:
             duration = scene_duration * max(1, len(word)) / total_characters
-            end = min(scene.end, cursor + duration)
-            lines.append(f"Dialogue: 0,{ass_time(cursor)},{ass_time(end)},Default,,0,0,0,,{word}")
+            end = min(narration_end, cursor + duration)
+            if narration_end_cs > scene_start_cs:
+                start_cs = min(
+                    narration_end_cs - 1,
+                    max(scene_start_cs, round(cursor * 100)),
+                )
+                end_cs = max(
+                    start_cs + 1,
+                    min(narration_end_cs, math.floor(end * 100 + 1e-9)),
+                )
+                lines.append(
+                    f"Dialogue: 0,{_ass_time_from_centiseconds(start_cs)},{_ass_time_from_centiseconds(end_cs)},Default,,0,0,0,,{word}"
+                )
             cursor = end
     output.write_text("\n".join(lines), encoding="utf-8")
     return output
@@ -57,24 +75,42 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
 def build_mix_command(project_dir: Path, storyboard: Storyboard, voice: Path, music: Path, captions: Path, output: Path) -> list[str]:
     frames = project_dir / "frames" / "frame-%06d.png"
     subtitle_path = str(captions).replace(":", "\\:").replace("'", "\\'")
+    sfx_dir = Path(__file__).resolve().parents[2] / "assets" / "music" / "sfx"
+    sfx_files = {
+        "whoosh": ("whoosh.wav", 0.35),
+        "pop": ("pop.wav", 0.35),
+        "bass_drop": ("drop.wav", 0.45),
+    }
+    sfx_inputs = []
+    sfx_input_indexes = {}
+    sfx_filters = []
+    mix_inputs = ["[ducked]", "[vo]"]
+    for scene in storyboard.scenes:
+        if scene.sfx == "none":
+            continue
+        if scene.sfx not in sfx_input_indexes:
+            sfx_input_indexes[scene.sfx] = len(sfx_inputs) + 3
+            sfx_inputs.append(sfx_dir / sfx_files[scene.sfx][0])
+        input_index = sfx_input_indexes[scene.sfx]
+        delay = round(scene.start * 1000)
+        label = f"sfx{len(sfx_filters)}"
+        volume = sfx_files[scene.sfx][1]
+        sfx_filters.append(f"[{input_index}:a]adelay={delay}|{delay},volume={volume}[{label}]")
+        mix_inputs.append(f"[{label}]")
     filter_graph = ";".join([
         f"[1:a]aresample=48000,apad,atrim=0:{storyboard.duration},asplit=2[vo][sc]",
         f"[2:a]aloop=loop=-1:size=48000*22,atrim=0:{storyboard.duration},volume=0.42[music]",
         "[music][sc]sidechaincompress=threshold=0.025:ratio=8:attack=20:release=350[ducked]",
-        "[3:a]adelay=2500|2500,volume=0.35[whoosh]",
-        "[4:a]adelay=12000|12000,volume=0.35[pop]",
-        "[5:a]adelay=25000|25000,volume=0.45[drop]",
-        "[ducked][vo][whoosh][pop][drop]amix=inputs=5:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]",
+        *sfx_filters,
+        f"{''.join(mix_inputs)}amix=inputs={len(mix_inputs)}:duration=first:normalize=0,loudnorm=I=-16:TP=-1.5:LRA=11[aout]",
         f"[0:v]subtitles='{subtitle_path}'[vout]",
     ])
-    sfx_dir = Path(__file__).resolve().parents[2] / "assets" / "music" / "sfx"
+    sfx_args = [argument for path in sfx_inputs for argument in ("-i", str(path))]
     return [
         "ffmpeg", "-y",
         "-framerate", "30", "-i", str(frames),
         "-i", str(voice), "-i", str(music),
-        "-i", str(sfx_dir / "whoosh.wav"),
-        "-i", str(sfx_dir / "pop.wav"),
-        "-i", str(sfx_dir / "drop.wav"),
+        *sfx_args,
         "-filter_complex_threads", "1", "-filter_complex", filter_graph,
         "-map", "[vout]", "-map", "[aout]",
         "-t", str(storyboard.duration), "-r", "30",
@@ -109,7 +145,7 @@ async def capture_motion_frames(html: str, project_dir: Path, storyboard: Storyb
 
 
 class MotionRenderer:
-    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None) -> StudioOutput:
+    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None, quality_mode: str = "strict", review_label: str | None = None) -> StudioOutput:
         await capture_motion_frames(html, project_dir, storyboard)
         write_ass_captions(storyboard, audio.durations, audio.captions_path)
         output_path = (output_dir or project_dir / "output") / "trailer.mp4"
@@ -133,6 +169,8 @@ class MotionRenderer:
             source_url=source_url or (storyboard.sources[0].url if storyboard.sources else None),
             style=storyboard.style,
             voice=storyboard.voice,
+            quality_mode=quality_mode,
+            review_label=review_label,
             critique_scores=critique_scores or {},
         )
         (output_path.parent / "studio-output.json").write_text(output.model_dump_json(indent=2), encoding="utf-8")

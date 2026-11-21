@@ -47,3 +47,13 @@ export function createStudioProject(input: { url: string; style: string; voice: 
 export function createStudioSample(): Promise<StudioProjectSnapshot> {
   return request<StudioProjectSnapshot>("/api/studio/projects/sample", { method: "POST" });
 }
+
+export function createStudioInput(input: { source: string; style: string; voice: string; qualityMode?: "strict" | "draft"; files?: File[] }): Promise<StudioProjectSnapshot> {
+  const form = new FormData();
+  form.append("source", input.source);
+  form.append("style", input.style);
+  form.append("voice", input.voice);
+  form.append("quality_mode", input.qualityMode ?? "strict");
+  input.files?.forEach((file) => form.append("files", file, file.name));
+  return request<StudioProjectSnapshot>("/api/studio/projects/inputs", { method: "POST", body: form });
+}

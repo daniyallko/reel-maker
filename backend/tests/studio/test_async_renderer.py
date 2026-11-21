@@ -24,7 +24,9 @@ async def test_render_runs_ffmpeg_with_timeout(tmp_path: Path, monkeypatch):
     async def no_frames(*_):
         return None
     monkeypatch.setattr("app.studio.renderer.capture_motion_frames", no_frames)
-    output = await MotionRenderer().render("<html></html>", storyboard, assets, audio, tmp_path, source_url="https://acme.example")
+    output = await MotionRenderer().render("<html></html>", storyboard, assets, audio, tmp_path, source_url="https://acme.example", quality_mode="draft", review_label="Unreviewed draft")
     assert output.duration == 32
     assert output.source_url == "https://acme.example"
+    assert output.quality_mode == "draft"
+    assert output.review_label == "Unreviewed draft"
     assert calls[0]["timeout"] == 600

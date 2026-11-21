@@ -15,7 +15,7 @@ def test_invalid_url_returns_422():
 
 def test_sample_route_uses_mock_mode(monkeypatch):
     called = {}
-    async def fake_create(url, style, voice, sample=False):
+    async def fake_create(url, style, voice, sample=False, quality_mode="strict"):
         called.update(url=url, style=style, voice=voice, sample=sample)
         return StudioProjectSnapshot(id="studio-demo", status="queued", source_url=url, style=style, voice=voice, created_at=1)
     monkeypatch.setattr(manager, "create", fake_create)
@@ -27,12 +27,27 @@ def test_sample_route_uses_mock_mode(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_sample_replay_asset_ids_are_unique():
+async def test_sample_replay_assets_and_telemetry_match_bundle():
     snapshot = await manager.create(sample_site_url(), "launch", "Fenrir", sample=True)
     job = manager.get(snapshot.id)
     await job.task
     ids = [asset.id for asset in job.assets]
     assert len(ids) == len(set(ids))
+    assert len(ids) == 9
+
+    events = {event.agent: event for event in job.events.events}
+    assert events["researcher"].message == "2 citations indexed (1 web, 1 inline)."
+    assert [asset.id for asset in events["harvester"].assets] == ["hero", "mid", "scroll"]
+    assert events["nano_visuals"].message == "5 scene and cover visuals rendered."
+    assert [asset.id for asset in events["nano_visuals"].assets] == [
+        "scene-hook",
+        "scene-scale",
+        "scene-engineering",
+        "scene-takeaway",
+        "thumbnail",
+    ]
+    assert events["voice_studio"].message == "Narration aligned to scene timings; captions are scene-bounded estimates."
+    assert events["vision_director"].message == "7 director stills packaged for offline review."
 
 
 def test_zip_uses_generated_thumbnail_path(tmp_path):
@@ -73,7 +88,7 @@ def test_zip_uses_generated_thumbnail_path(tmp_path):
 
 def test_user_domain_is_passed_through_unchanged(monkeypatch):
     captured = {}
-    async def fake_create(url, style, voice, sample=False):
+    async def fake_create(url, style, voice, sample=False, quality_mode="strict"):
         captured["url"] = url
         return StudioProjectSnapshot(id="acme", status="queued", source_url=url, style=style, voice=voice, created_at=1)
     monkeypatch.setattr(manager, "create", fake_create)
@@ -88,3 +103,48 @@ def test_project_and_event_routes_exist(monkeypatch):
     response = TestClient(app).get("/api/studio/projects/studio-demo")
     assert response.status_code == 200
     assert response.json()["id"] == "studio-demo"
+
+
+def test_multipart_source_endpoint_accepts_text_and_files(monkeypatch):
+    called = {}
+
+    async def fake_create_input(source, style, voice, files, quality_mode="strict"):
+        called.update(source=source, style=style, voice=voice, files=files, quality_mode=quality_mode)
+        return StudioProjectSnapshot(
+            id="input-demo",
+            status="queued",
+            source_url="inline://text",
+            source_title="A cinematic story",
+            style=style,
+            voice=voice,
+            created_at=1,
+        )
+
+    monkeypatch.setattr(manager, "create_input", fake_create_input)
+    response = TestClient(app).post(
+        "/api/studio/projects/inputs",
+        data={"source": "A cinematic story", "style": "tech_launch", "voice": "Aoede", "quality_mode": "draft"},
+        files=[
+            ("files", ("notes.txt", b"Evidence", "text/plain")),
+            ("files", ("visual.png", b"png-bytes", "image/png")),
+        ],
+    )
+    assert response.status_code == 202
+    assert response.json()["source_title"] == "A cinematic story"
+    assert called["source"] == "A cinematic story"
+    assert called["quality_mode"] == "draft"
+    assert called["files"][0][0] == "notes.txt"
+    assert called["files"][1][1] == "image/png"
+
+
+def test_multipart_source_endpoint_returns_public_validation_message(monkeypatch):
+    async def invalid_source(*_, **__):
+        raise ValueError("Enter a topic, description, URL, or source file.")
+
+    monkeypatch.setattr(manager, "create_input", invalid_source)
+    response = TestClient(app).post(
+        "/api/studio/projects/inputs",
+        data={"source": "", "style": "launch", "voice": "Fenrir"},
+    )
+    assert response.status_code == 422
+    assert response.json()["detail"] == "Enter a topic, description, URL, or source file."

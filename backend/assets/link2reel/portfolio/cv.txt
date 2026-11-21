@@ -1,0 +1,45 @@
+MOHD DANIYAL
+Full Stack AI Engineer | Agentic AI, Advanced RAG and Voice AI
+Lucknow, India | Available immediately
+Portfolio: daniyal.pro | linkedin.com/in/mohd-daniyal-ai | github.com/daniyallko
+
+SUMMARY
+Full Stack AI Engineer with 5+ years of experience building production web platforms, specializing in agentic AI, advanced RAG, and voice AI. Core engineer on AI BotKit, a multi-channel RAG chatbot platform live on 1,000+ websites serving 100,000+ users. Built hybrid retrieval with reranking, LangGraph agents, WhatsApp and Telegram voice, and LLM tracing. Also built a real-time WebRTC voice agent and an MCP server, and run a licensing platform at 99.9% uptime.
+
+SKILLS
+Agentic AI and LLM: LangGraph, LangChain, multi-agent orchestration, tool calling, Model Context Protocol (MCP), advanced RAG, hybrid BM25 and vector search, Reciprocal Rank Fusion, reranking, Pinecone, prompt engineering, LLM tracing and evaluation, OpenAI, Gemini, and Groq APIs.
+Voice and conversational AI: real-time voice agents, WebRTC, WebSockets, AudioWorklet, Whisper, text-to-speech, AI chatbots, WhatsApp Cloud API, and Telegram Bot API.
+Languages and frameworks: Python, FastAPI, TypeScript, JavaScript, Node.js, React, Next.js, TanStack Start, PHP, SQL, and REST APIs.
+Data, cloud and DevOps: PostgreSQL, Supabase, MySQL, AWS, Google Cloud, Oracle Cloud, Docker, Cloudflare, Linux, CDN, CI/CD, Git, GitHub, and Stripe.
+
+PROFESSIONAL EXPERIENCE
+Software Engineer, WisdmLabs | July 2023 – Present
+AI BotKit, multi-tenant AI chatbot platform, team of 4; Edwiser.org production licensing platform.
+- Core engineer on AI BotKit, a multi-tenant RAG chatbot platform live on 1,000+ websites and serving 100,000+ users. The platform builds a knowledge base from site pages and documents and embeds through one JavaScript snippet.
+- Built the RAG pipeline with Pinecone hybrid search, cross-encoder reranking, relevance gating, grounded answers, honest fallback, and human handover.
+- Built the agentic chat engine with LangChain and LangGraph, tool calling, PostgreSQL-backed memory with rolling summarization, OpenAI and Gemini support, LangSmith tracing, and FastAPI services.
+- Built native Meta WhatsApp Cloud API integration and Telegram voice support with Whisper transcription, language detection, spoken replies, and allowlist access control.
+- Solved multimodal edge cases by pairing photos with voice notes using a short debounce buffer and boosted voice-note loudness by editing Opus headers in memory without transcoding.
+- Own the live Edwiser.org licensing platform for license sales and activation, responsible for 99.9% uptime, speed, and server management; migrated it to faster servers.
+- Migrated 10,000+ users between Stripe accounts with no downtime through export scripts, staging rehearsals, staged transaction switching, and subscription ID synchronization.
+- Built a one-click Stripe upgrade plugin and a consent-based plugin-installation data tool; handled support tickets and international clients.
+
+Software Engineer, Limestreet, D.K. Sp. z o.o. | June 2022 – February 2023
+- Ran a live e-commerce site with custom features, payment integrations, and CDN-based page-speed optimization.
+
+Software Engineer, ProProfs | June 2021 – June 2022
+- Built full stack features with PHP CodeIgniter, SQL, and JavaScript for an embeddable popup and lead-capture SaaS with A/B testing.
+
+PERSONAL PROJECTS
+Real-Time Voice AI and Hybrid RAG Assistant
+- Built a real-time voice agent with TanStack Start, React 19, and Supabase using WebRTC and WebSocket streaming, custom AudioWorklets, client-side voice activity detection, and barge-in, with sub-500ms time-to-first-audio.
+- Built hybrid RAG with BM25 and embeddings fused through Reciprocal Rank Fusion, cross-lingual query handling, and a three-tier cache that reduced repeat-query latency from seconds to milliseconds.
+- Added a golden-dataset evaluation pipeline and a live latency telemetry overlay.
+
+Code To AI Podcast, StudioEngineer MCP
+- Built a full-stack platform using React 19, TypeScript, TanStack Start, and FastAPI that turns public GitHub commits and pull requests into multi-speaker podcasts with Groq scriptwriting, a fallback diff parser, and Edge TTS voices.
+- Automated broadcast-grade audio with FFmpeg filtergraphs, sidechain ducking, stereo panning, EBU R128 loudness, and a bounded two-worker render queue with live position, retries, and cache cleanup.
+- Added an offline MCP server for coding agents and deployed with Docker on Oracle Cloud ARM64 behind Cloudflare Tunnels.
+
+EDUCATION
+B.Tech, Computer Science and Engineering, Babu Banarasi Das Engineering College, Lucknow, AKTU | 2016 – 2020

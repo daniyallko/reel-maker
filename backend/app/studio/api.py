@@ -1,11 +1,12 @@
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.config import get_settings
 from app.studio.jobs import StudioJobManager
+from app.studio.sources import MAX_FILE_BYTES
 from app.studio.urls import sample_site_url
 
 router = APIRouter(prefix="/api/studio")
@@ -16,6 +17,7 @@ class StudioCreateRequest(BaseModel):
     url: str
     style: Literal["launch", "tech_launch", "deep_dive", "roast", "founder"] = "launch"
     voice: Literal["Charon", "Fenrir", "Puck", "Aoede"] = "Fenrir"
+    quality_mode: Literal["strict", "draft"] = "strict"
 
 
 def error(status: int, message: str) -> HTTPException:
@@ -25,7 +27,28 @@ def error(status: int, message: str) -> HTTPException:
 @router.post("/projects", status_code=202)
 async def create_project(input: StudioCreateRequest):
     try:
-        return await manager.create(input.url, input.style, input.voice)
+        return await manager.create(input.url, input.style, input.voice, quality_mode=input.quality_mode)
+    except ValueError as exception:
+        raise error(422, "Enter a valid public http or https URL.") from exception
+
+
+@router.post("/projects/inputs", status_code=202)
+async def create_source_project(
+    source: str = Form(default=""),
+    style: Literal["launch", "tech_launch", "deep_dive", "roast", "founder"] = Form(default="launch"),
+    voice: Literal["Charon", "Fenrir", "Puck", "Aoede"] = Form(default="Fenrir"),
+    quality_mode: Literal["strict", "draft"] = Form(default="strict"),
+    files: list[UploadFile] | None = File(default=None),
+):
+    uploads = files or []
+    if len(uploads) > 8:
+        raise error(422, "Upload at most 8 files.")
+    payload = []
+    for upload in uploads:
+        data = await upload.read(MAX_FILE_BYTES + 1)
+        payload.append((upload.filename or "upload", upload.content_type or "application/octet-stream", data))
+    try:
+        return await manager.create_input(source, style, voice, payload, quality_mode)
     except ValueError as exception:
         raise error(422, str(exception)) from exception
 

@@ -7,6 +7,7 @@ __pycache__/
 .mypy_cache/
 
 # Builds
+.worktrees/
 .next/
 out/
 dist/

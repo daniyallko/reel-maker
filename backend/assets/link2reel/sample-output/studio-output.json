@@ -1,5 +1,5 @@
 {
-  "title": "Orbit Notes — Think in Public",
+  "title": "Mohd Daniyal — Production AI in Motion",
   "trailer_url": "/media/sample-output/trailer.mp4",
   "thumbnail_url": "/media/sample-output/visuals/thumbnail-03.png",
   "preview_url": "/media/sample-output/audio/narration.wav",
@@ -9,65 +9,100 @@
     {
       "id": "hook",
       "start": 0.0,
-      "end": 2.5,
-      "headline": "YOUR NEXT IDEA IS ALREADY IN ORBIT",
-      "narration": "Your next big idea is already hiding in your notes.",
-      "visual_prompt": "Kinetic 3D website slab slam with the Orbit Notes brand.",
-      "source_refs": [
-        0
-      ]
-    },
-    {
-      "id": "problem",
-      "start": 2.5,
-      "end": 12.0,
-      "headline": "SCATTERED THOUGHTS GET LOST",
-      "narration": "Most notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.",
-      "visual_prompt": "Constellation of connected ideas resolving from scattered notes.",
+      "end": 2.50234375,
+      "headline": "PRODUCTION AI. REAL IMPACT.",
+      "narration": "Mohd Daniyal builds production AI systems that turn complex research into reliable products.",
+      "visual_prompt": "A dramatic close crop of the real Mohd Daniyal portfolio interface with no added text.",
       "source_refs": [
         0,
         1
-      ]
+      ],
+      "visual_type": "screenshot",
+      "layout": "full_bleed",
+      "camera": "push_in",
+      "animation": "clip_reveal",
+      "transition": "cut",
+      "sfx": "pop",
+      "callouts": [],
+      "metrics": []
     },
     {
-      "id": "system",
-      "start": 12.0,
-      "end": 25.0,
-      "headline": "LOCAL FIRST. LINKED BY DESIGN.",
-      "narration": "The constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.",
-      "visual_prompt": "Real Orbit Notes interface with glowing graph connections and privacy callouts.",
+      "id": "scale",
+      "start": 2.50234375,
+      "end": 11.981250000000001,
+      "headline": "AI AT PRODUCTION SCALE",
+      "narration": "As a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.",
+      "visual_prompt": "Real AI BotKit and portfolio product interfaces with layered depth and no invented metrics or text.",
       "source_refs": [
         0,
         1
-      ]
+      ],
+      "visual_type": "screenshot",
+      "layout": "split",
+      "camera": "pan_right",
+      "animation": "parallax",
+      "transition": "wipe",
+      "sfx": "whoosh",
+      "callouts": [],
+      "metrics": []
+    },
+    {
+      "id": "engineering",
+      "start": 11.981250000000001,
+      "end": 24.9934375,
+      "headline": "AGENTS. RAG. REAL-TIME VOICE.",
+      "narration": "His work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.",
+      "visual_prompt": "Real portfolio engineering projects, voice-agent telemetry, and product UI details with no fake dashboards or added copy.",
+      "source_refs": [
+        0,
+        1
+      ],
+      "visual_type": "source_image",
+      "layout": "bento",
+      "camera": "pull_out",
+      "animation": "stagger",
+      "transition": "whip",
+      "sfx": "bass_drop",
+      "callouts": [],
+      "metrics": []
     },
     {
       "id": "takeaway",
-      "start": 25.0,
+      "start": 24.9934375,
       "end": 32.0,
-      "headline": "THINK IN PUBLIC. KEEP IT YOURS.",
-      "narration": "Seven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.",
-      "visual_prompt": "Monday review card resolving into the Orbit Notes cover thumbnail.",
+      "headline": "BUILD WHAT MOVES AI FORWARD",
+      "narration": "Mohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
+      "visual_prompt": "The real Mohd Daniyal portfolio closing view and brand imagery with calm negative space for the separate headline layer.",
       "source_refs": [
         0
-      ]
+      ],
+      "visual_type": "source_image",
+      "layout": "hero",
+      "camera": "static",
+      "animation": "clip_reveal",
+      "transition": "dissolve",
+      "sfx": "none",
+      "callouts": [],
+      "metrics": []
     }
   ],
   "sources": [
     {
-      "url": "https://example.com/orbit",
-      "title": "Orbit Notes product site",
-      "claim": "Local-first notes, constellation links, offline search, open exports, and Monday review"
+      "url": "https://daniyal.pro",
+      "title": "Mohd Daniyal portfolio",
+      "claim": "Production AI engineering, AI BotKit, voice systems, and selected project evidence"
     },
     {
-      "url": "https://example.com/orbit-review",
-      "title": "Orbit Notes field review",
-      "claim": "A seven-minute weekly review reconnects recent ideas"
+      "url": "inline://portfolio-cv",
+      "title": "Mohd Daniyal professional CV",
+      "claim": "1,000+ websites, 100,000+ users, sub-500ms first audio, and 99.9% platform uptime"
     }
   ],
-  "script": "YOUR NEXT IDEA IS ALREADY IN ORBIT\nYour next big idea is already hiding in your notes.\n\nSCATTERED THOUGHTS GET LOST\nMost notes apps store words. Orbit reconnects the thinking between them, so the idea you forgot comes back when it matters.\n\nLOCAL FIRST. LINKED BY DESIGN.\nThe constellation view maps every link on your device. Offline search, open exports, and private sync keep deep work fast and portable.\n\nTHINK IN PUBLIC. KEEP IT YOURS.\nSeven minutes every Monday is enough to see what moved. Orbit Notes. Think in public, while keeping your thinking yours.",
-  "source_url": "file:///home/daniyallko/reel-maker/backend/assets/link2reel/sample-site/index.html",
+  "script": "PRODUCTION AI. REAL IMPACT.\nMohd Daniyal builds production AI systems that turn complex research into reliable products.\n\nAI AT PRODUCTION SCALE\nAs a core engineer on AI BotKit, Mohd helped build a multi-tenant RAG platform live on more than 1,000 websites and serving over 100,000 users.\n\nAGENTS. RAG. REAL-TIME VOICE.\nHis work spans LangGraph agents, hybrid retrieval with reranking, FastAPI, Next.js, and real-time voice. His custom voice stack reaches first audio in under 500 milliseconds, while his licensing platform maintains 99.9 percent uptime.\n\nBUILD WHAT MOVES AI FORWARD\nMohd Daniyal is a Full Stack AI Engineer focused on agentic AI, advanced RAG, and voice systems. Explore his work at daniyal.pro.",
+  "source_url": "https://daniyal.pro",
   "style": "launch",
   "voice": "Fenrir",
+  "quality_mode": "draft",
+  "review_label": "Unreviewed draft",
   "critique_scores": {}
 }
