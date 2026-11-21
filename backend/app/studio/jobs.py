@@ -183,7 +183,7 @@ class StudioJobManager:
             if sample and (SAMPLE_OUTPUT / "sample.json").exists():
                 output = await self._replay_sample(job)
             else:
-                provider = MockStudioProvider() if sample else GeminiStudioProvider(self.settings.gemini_api_key or "")
+                provider = MockStudioProvider() if sample else GeminiStudioProvider(self.settings.gemini_api_key or "", settings=self.settings)
                 graph = build_studio_graph(
                     provider,
                     MotionRenderer(),

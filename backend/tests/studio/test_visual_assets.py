@@ -108,3 +108,25 @@ async def test_cover_failure_does_not_replace_successful_scene_art(tmp_path):
     assert center_pixel(generated) == (32, 64, 96)
     assert center_pixel(assets[-1]) != (32, 64, 96)
     assert all(asset.local_path.exists() for asset in assets)
+
+
+@pytest.mark.asyncio
+async def test_generated_art_failure_uses_screenshot_when_no_upload_exists(tmp_path):
+    async def fail(*_):
+        return False
+
+    bundle = media_bundle(tmp_path, uploaded=False, screenshot=True)
+    assets = await build_scene_visuals(directed_storyboard(), bundle, tmp_path, fail)
+    generated = next(asset for asset in assets if asset.id == "scene-sort")
+    assert center_pixel(generated) == (96, 32, 64)
+
+
+@pytest.mark.asyncio
+async def test_cover_uses_distinct_source_composition(tmp_path):
+    bundle = media_bundle(tmp_path, uploaded=True, screenshot=True)
+    assets = await build_scene_visuals(directed_storyboard(), bundle, tmp_path)
+    with Image.open(assets[-1].local_path) as image:
+        top = image.convert("RGB").getpixel((540, 240))
+        bottom = image.convert("RGB").getpixel((540, 1680))
+    assert top == (32, 64, 96)
+    assert bottom == (96, 32, 64)

@@ -84,3 +84,31 @@ Therefore external live research, live 6–8-scene topic generation, live asset 
 - Captions are estimated word events bounded by measured scene narration. Exact word-level TTS synchronization is not claimed.
 - Mixed-source input has a finite combined bound: harvested page copy is capped at 18,000 characters and uploaded source text at 30,000 characters, so the two together can total 48,000 characters. This documents the combined bound; no additional mixed-source enforcement test was required.
 - Live-provider behavior remains unverified in this environment. The regenerated sample is explicitly unreviewed even though its source scenes and cover now use real portfolio captures.
+
+## Provider fallback follow-up — 2026-11-21
+
+Fallback changes are on `feat/universal-story-studio` and are currently uncommitted. They add OpenRouter/Groq structured generation, schema-repair retries, bounded 429 backoff, provider-attempt telemetry, mixed-media storyboard fallbacks, SVG/vector artwork, null-response handling, and unsafe-SVG validation.
+
+### Automated and direct provider checks
+
+- Full backend: **208/208 tests passed** in 59.24s.
+- Direct OpenRouter structured research: **PASS** — valid `ResearchPlan` for ocean cleanup robots.
+- Direct Groq structured research: **PASS** — valid `ResearchPlan` for ocean cleanup robots.
+- Direct Groq storyboard: **PASS** — valid eight-scene `Storyboard` after provider/schema retries.
+- `git diff --check`: **PASS**.
+
+### Live smoke outcomes
+
+- URL strict smoke: **FAIL** at the six-criterion creative gate. This is not a pass claim. The latest recorded scores were `{'typography/contrast': 7, 'safe-zone compliance': 9, 'editorial craft': 5, 'visual momentum': 4, 'narrative alignment': 6, 'asset relevance': 5}`.
+- Ocean-topic strict smoke: **FAIL** at the six-criterion creative gate. The final recorded scores were `{'typography/contrast': 8, 'safe-zone compliance': 9, 'editorial craft': 5, 'visual momentum': 4, 'narrative alignment': 7, 'asset relevance': 6}`.
+- URL explicit draft smoke: **PASS** — project `720cdbca0260`, 32 seconds, four cited scenes, valid media QA and ZIP, `Unreviewed draft` with no scores.
+- Ocean-topic explicit draft smoke: **PASS** — project `788a76736d9a`, 32 seconds, seven cited scenes and three sources including external HTTP(S) research. Scores: `{'typography/contrast': 9, 'safe-zone compliance': 9, 'editorial craft': 8, 'visual momentum': 7, 'narrative alignment': 8, 'asset relevance': 8}`. `Unreviewed draft` is retained.
+
+### Browser outcomes
+
+- Full browser suite: **PASS** — project `b677a98cdb02`, duration 32 seconds; homepage, sample playback, scene seeking, citations, downloads, mobile overflow, reduced motion, and browser errors checked.
+- Live URL draft playback: **PASS** — project `720cdbca0260`, 32-second video, four scene buttons, no browser errors. Screenshot inspected at `frontend/test-results/live-url-draft-premiere.png`.
+- Live ocean-topic draft playback and scene seeking: **PASS** — project `788a76736d9a`, 32-second video, seven scene buttons, no browser errors. Screenshot inspected at `frontend/test-results/live-topic-draft-premiere.png`.
+- The ocean contact sheet was inspected at `backend/data/788a76736d9a/audit/contact-sheet.png`. It contains generated art, diagrams, kinetic type, and procedural scenes; draft scores are reported above. Strict quality is not claimed.
+
+Strict creative quality and reliable live art generation still depend on provider availability and output quality. The draft path produces valid videos; it does not prove the strict 8/10 creative gate passes.

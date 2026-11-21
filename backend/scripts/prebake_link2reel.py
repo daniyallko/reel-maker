@@ -32,7 +32,7 @@ async def main():
     cv_bundle = ingest_text(CV_PATH.read_text(encoding="utf-8"), title="Mohd Daniyal — Full Stack AI Engineer")
     harvested = merge_source_bundle(harvested, cv_bundle)
     storyboard = portfolio_storyboard()
-    provider = GeminiStudioProvider(settings.gemini_api_key or "") if settings.gemini_api_key else MockStudioProvider()
+    provider = GeminiStudioProvider(settings.gemini_api_key or "", settings=settings) if settings.gemini_api_key else MockStudioProvider()
     portfolio_visuals = harvested.model_copy(update={
         "image_paths": [*harvested.screenshots, *harvested.image_paths],
     })

@@ -24,6 +24,13 @@ async def emit_heartbeat(events: EventBus, agent: str, message: str, progress: f
     return await task
 
 
+async def emit_fallback_history(events: EventBus, agent: str, provider, start: int, progress: float) -> int:
+    history = getattr(getattr(provider, "fallback", None), "history", [])
+    for entry in history[start:]:
+        await events.emit(agent, "running", f"Provider response / {entry}", progress)
+    return len(history)
+
+
 class StudioState(TypedDict, total=False):
     project_id: str
     project_dir: Path
@@ -112,6 +119,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
         message = "Capturing the live page and brand system…" if sample else "Researching evidence for the story…"
         progress = 8 if sample else 10
         harvested, report = await emit_heartbeat(events, agent, message, progress, work)
+        await emit_fallback_history(events, "researcher", provider, 0, 22)
         await events.emit("harvester", "complete", f"{len(harvested.assets)} real source assets captured.", 20, assets=harvested.assets)
         await events.emit("researcher", "complete", f"{len(report.sources)} sources synthesized with {report.provider}.", 24)
         return {
@@ -124,6 +132,7 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def write(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("scriptwriter", "running", "Writing the narrative shot map…", 32)
+        fallback_start = len(getattr(getattr(provider, "fallback", None), "history", []))
         storyboard = await provider.write_storyboard(
             state["harvest"],
             state["sources"],
@@ -131,13 +140,16 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
             state["voice"],
             research=state["research_report"],
         )
+        await emit_fallback_history(events, "scriptwriter", provider, fallback_start, 40)
         await events.emit("scriptwriter", "complete", f"Storyboard locked with {len(storyboard.scenes)} scenes at {storyboard.duration:.0f} seconds.", 42, payload={"storyboard": storyboard.model_dump()})
         return {"storyboard": storyboard}
 
     async def visuals(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("nano_visuals", "running", "Directing scene assets and the cover…", 48)
+        fallback_start = len(getattr(getattr(provider, "fallback", None), "history", []))
         assets = await provider.generate_visuals(state["storyboard"], state["harvest"], state["project_dir"])
+        await emit_fallback_history(events, "nano_visuals", provider, fallback_start, 56)
         await events.emit("nano_visuals", "complete", f"{len(assets)} vertical assets rendered.", 58, assets=assets)
         return {"visuals": assets, "assets": state["assets"] + assets}
 

@@ -30,13 +30,23 @@ def _asset(project_dir: Path, path: Path, asset_id: str, kind: str, label: str) 
 
 
 def _save_procedural(path: Path, index: int) -> None:
+    accents = ((72, 96, 190), (22, 128, 118), (160, 88, 54), (116, 72, 160))
+    accent = accents[index % len(accents)]
     canvas = Image.new("RGBA", (1080, 1920), (5, 6, 10, 255))
     draw = ImageDraw.Draw(canvas)
-    accent = (94, 106, 210, 180)
-    for line in range(7):
-        y = 260 + line * 190 + index * 36
-        draw.line((72, y, 1008 - line * 72, y - 120), fill=accent, width=3)
-    draw.rectangle((72 + index * 36, 300, 620 + index * 36, 980), outline=(255, 255, 255, 45), width=2)
+    for band in range(12):
+        shade = 12 + band * 3
+        draw.rectangle((0, band * 160, 1080, (band + 1) * 160), fill=(shade // 3, shade // 2, shade + 8, 255))
+    for step in range(4):
+        offset = (index % 3) * 52 + step * 138
+        draw.rounded_rectangle(
+            (72 + offset, 280 + step * 190, 620 + offset, 390 + step * 190),
+            radius=24,
+            fill=(*accent, 70 + step * 25),
+            outline=(255, 255, 255, 45),
+            width=2,
+        )
+    draw.ellipse((650, 180, 1180, 710), outline=(*accent, 180), width=12)
     canvas.convert("RGB").save(path, "PNG", optimize=True)
 
 
@@ -55,6 +65,30 @@ def _save_source_or_procedural(source: Path | None, path: Path, index: int) -> N
         except (OSError, ValueError):
             pass
     _save_procedural(path, index)
+
+
+def _save_cover(harvest: SourceBundle | None, path: Path) -> None:
+    primary = _source_image(harvest, 0) or _screenshot(harvest, 0)
+    secondary = _screenshot(harvest, 0) or _source_image(harvest, 1)
+    if primary is None:
+        _save_procedural(path, 3)
+        return
+    try:
+        with Image.open(primary) as opened:
+            top = cover(opened.convert("RGB"), (1080, 960), focus_y=0.3)
+        if secondary is not None:
+            with Image.open(secondary) as opened:
+                bottom = cover(opened.convert("RGB"), (1080, 960), focus_y=0.65)
+        else:
+            with Image.open(primary) as opened:
+                bottom = cover(opened.convert("RGB"), (1080, 960), focus_y=0.8)
+        canvas = Image.new("RGB", (1080, 1920))
+        canvas.paste(top, (0, 0))
+        canvas.paste(bottom, (0, 960))
+        ImageDraw.Draw(canvas).rectangle((0, 954, 1080, 966), fill=(5, 6, 10))
+        canvas.save(path, "PNG", optimize=True)
+    except (OSError, ValueError):
+        _save_procedural(path, 3)
 
 
 def _source_image(harvest: SourceBundle | None, index: int) -> Path | None:
@@ -79,8 +113,10 @@ def _save_scene_fallback(scene: StoryScene, harvest: SourceBundle | None, path: 
     source = None
     if scene.visual_type == "screenshot":
         source = _screenshot(harvest, index)
-    elif scene.visual_type in {"source_image", "generated_art"}:
+    elif scene.visual_type == "source_image":
         source = _source_image(harvest, index)
+    elif scene.visual_type == "generated_art":
+        source = _source_image(harvest, index) or _screenshot(harvest, index)
     _save_source_or_procedural(source, path, index)
 
 
@@ -101,7 +137,7 @@ def build_fallback_visuals(storyboard: Storyboard, harvest: SourceBundle | None,
         _save_scene_fallback(scene, harvest, path, index)
         assets.append(_scene_asset(scene, project_dir, path))
     cover_path = output / "thumbnail.png"
-    _save_source_or_procedural(_source_image(harvest, len(assets)), cover_path, len(assets))
+    _save_cover(harvest, cover_path)
     assets.append(_asset(project_dir, cover_path, "thumbnail", "thumbnail", "Cover"))
     return assets
 
@@ -137,6 +173,6 @@ async def build_scene_visuals(
         except Exception:
             generated = False
     if not generated or not cover_path.exists():
-        _save_source_or_procedural(_source_image(harvest, len(assets)), cover_path, len(assets))
+        _save_cover(harvest, cover_path)
     assets.append(_asset(project_dir, cover_path, "thumbnail", "thumbnail", "Cover"))
     return assets

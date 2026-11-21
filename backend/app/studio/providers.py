@@ -1,6 +1,7 @@
 import asyncio
 import json
 import mimetypes
+import re
 import tempfile
 from pathlib import Path
 
@@ -9,6 +10,7 @@ from google.genai import types
 
 from app.media.audio import VOICE
 from app.studio.audio import produce_audio
+from app.studio.fallback_providers import OpenAIStudioFallback
 from app.studio.research import fallback_research_plan, fallback_research_report
 from app.studio.schemas import (
     HarvestResult,
@@ -200,6 +202,30 @@ def _fallback_sentence(text: str) -> str:
     return cleaned if cleaned.endswith((".", "!", "?")) else f"{cleaned}."
 
 
+def _fallback_callouts(text: str) -> list[str]:
+    parts = [part.strip() for part in re.split(r"[,;:]", text) if part.strip()]
+    if len(parts) < 2:
+        words = text.split()
+        midpoint = max(1, len(words) // 2)
+        parts = [" ".join(words[:midpoint]), " ".join(words[midpoint:]) or words[0]]
+    return [part[:32].rsplit(" ", 1)[0] if len(part) > 32 else part for part in parts[:2]]
+
+
+def _fallback_visual_direction(harvest: HarvestResult, index: int, text: str) -> tuple[str, list[str]]:
+    slot = index % 4
+    if slot == 0:
+        if harvest.screenshots:
+            return "screenshot", []
+        if harvest.image_paths:
+            return "source_image", []
+        return "kinetic_type", []
+    if slot == 2:
+        return "kinetic_type", []
+    if harvest.image_paths:
+        return "source_image", []
+    return "diagram", _fallback_callouts(text)
+
+
 def fallback_storyboard(
     harvest: HarvestResult,
     sources: list[SourceCitation],
@@ -238,6 +264,8 @@ def fallback_storyboard(
                 narration=_fallback_sentence(text),
                 visual_prompt=f"Evidence-led editorial imagery for {title}: {text}",
                 source_refs=refs,
+                visual_type=_fallback_visual_direction(harvest, index, text)[0],
+                callouts=_fallback_visual_direction(harvest, index, text)[1],
             )
             for index, (text, refs) in enumerate(entries)
         ]
@@ -248,10 +276,10 @@ def fallback_storyboard(
         third = sentences[2] if len(sentences) > 2 else second
         fourth = sentences[3] if len(sentences) > 3 else third
         scenes = [
-            StoryScene(id="hook", start=0, end=2.5, headline=_fallback_headline(first, title), narration=_fallback_sentence(first), visual_prompt=f"Real source imagery for {title}", source_refs=[0]),
-            StoryScene(id="problem", start=2.5, end=12, headline=_fallback_headline(second, "THE CHALLENGE"), narration=_fallback_sentence(second), visual_prompt=f"Editorial source imagery for {title}", source_refs=[0]),
-            StoryScene(id="system", start=12, end=25, headline=_fallback_headline(third, "HOW IT WORKS"), narration=_fallback_sentence(third), visual_prompt=f"Real source interface or supplied images for {title}", source_refs=[0]),
-            StoryScene(id="takeaway", start=25, end=32, headline=_fallback_headline(fourth, "WHY IT MATTERS"), narration=_fallback_sentence(fourth), visual_prompt=f"Cover artwork for {title}", source_refs=[0]),
+            StoryScene(id="hook", start=0, end=2.5, headline=_fallback_headline(first, title), narration=_fallback_sentence(first), visual_prompt=f"Real source imagery for {title}", source_refs=[0], visual_type=_fallback_visual_direction(harvest, 0, first)[0], callouts=_fallback_visual_direction(harvest, 0, first)[1]),
+            StoryScene(id="problem", start=2.5, end=12, headline=_fallback_headline(second, "THE CHALLENGE"), narration=_fallback_sentence(second), visual_prompt=f"Editorial source imagery for {title}", source_refs=[0], visual_type=_fallback_visual_direction(harvest, 1, second)[0], callouts=_fallback_visual_direction(harvest, 1, second)[1]),
+            StoryScene(id="system", start=12, end=25, headline=_fallback_headline(third, "HOW IT WORKS"), narration=_fallback_sentence(third), visual_prompt=f"Real source interface or supplied images for {title}", source_refs=[0], visual_type=_fallback_visual_direction(harvest, 2, third)[0], callouts=_fallback_visual_direction(harvest, 2, third)[1]),
+            StoryScene(id="takeaway", start=25, end=32, headline=_fallback_headline(fourth, "WHY IT MATTERS"), narration=_fallback_sentence(fourth), visual_prompt=f"Cover artwork for {title}", source_refs=[0], visual_type=_fallback_visual_direction(harvest, 3, fourth)[0], callouts=_fallback_visual_direction(harvest, 3, fourth)[1]),
         ]
     return Storyboard(
         title=title,
@@ -295,8 +323,17 @@ Build a researched narrative from the supplied evidence and ResearchReport when 
 Give narration and concise on-screen text different purposes: narration is spoken;
 the headline is concise on-screen text, never a static full-narration paragraph.
 Use typed shot direction with visual_type, layout, camera, animation, transition, sfx,
-callouts, and metrics. Diagram scenes need at least two callouts; data scenes need
-sourced metrics. Headlines must contain at most 42 characters; every scene must last at least 1.8 seconds.
+callouts, and metrics. Use exactly these values:
+- visual_type: screenshot | source_image | generated_art | kinetic_type | diagram | data
+- layout: hero | split | bento | full_bleed
+- camera: push_in | pull_out | pan_left | pan_right | static
+- animation: clip_reveal | stagger | counter_roll | path_draw | parallax
+- transition: cut | wipe | whip | dissolve
+- sfx: whoosh | pop | bass_drop | none
+Scene IDs must be unique strings and scene times must be contiguous and nonoverlapping.
+source_refs must be integer indexes into sources, never URLs.
+callouts must be strings, never objects. metrics must contain label, numeric value, and display.
+Diagram scenes need at least two callouts; data scenes need sourced metrics. Headlines must contain at most 42 characters; every scene must last at least 1.8 seconds.
 Use only the supplied evidence, never prior knowledge or plausible invention.
 Never introduce a platform, technical problem, code filename, integration, metric, customer, or capability absent from that evidence.
 Every scene must cite its supporting evidence in source_refs. If research has no
@@ -311,10 +348,11 @@ Video style: {style}. Voice: {voice}.
 
 
 class GeminiStudioProvider:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, settings=None, fallback=None):
         self.client = genai.Client(api_key=api_key)
         self.tts_api_version = TTS_API_VERSION
         self.tts_client = genai.Client(api_key=api_key, http_options={"api_version": self.tts_api_version})
+        self.fallback = fallback or (OpenAIStudioFallback(settings) if settings is not None else None)
 
     def _core_config(self) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
@@ -372,7 +410,14 @@ Primary brief ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}
 """
         contents = self._research_contents(prompt, harvest)
         parsed = await self._generate_research_schema(contents, ResearchPlan)
-        return parsed if isinstance(parsed, ResearchPlan) else fallback_research_plan(harvest, style)
+        if isinstance(parsed, ResearchPlan):
+            return parsed
+        if self.fallback is not None:
+            result = await self.fallback.generate_json(prompt, ResearchPlan, harvest.image_paths[:4])
+            if result is not None:
+                plan, _ = result
+                return plan
+        return fallback_research_plan(harvest, style)
 
     async def synthesize_research(
         self,
@@ -396,6 +441,11 @@ Supplied sources: {evidence}
 """
         contents = self._research_contents(prompt, harvest)
         parsed = await self._generate_research_schema(contents, ResearchReport)
+        provider_name = "gemini"
+        if not isinstance(parsed, ResearchReport) and self.fallback is not None:
+            result = await self.fallback.generate_json(prompt, ResearchReport, harvest.image_paths[:4])
+            if result is not None:
+                parsed, provider_name = result
         if not isinstance(parsed, ResearchReport):
             return fallback
         try:
@@ -407,7 +457,7 @@ Supplied sources: {evidence}
                 sources=fallback.sources,
                 queries=plan.queries,
                 external_research=fallback.external_research,
-                provider="gemini",
+                provider=provider_name,
             )
         except Exception:
             return fallback
@@ -438,6 +488,12 @@ Supplied sources: {evidence}
             except Exception:
                 if model == CORE_MODEL:
                     continue
+        if self.fallback is not None:
+            result = await self.fallback.generate_json(prompt, Storyboard, harvest.image_paths[:4])
+            if result is not None:
+                parsed, _ = result
+                candidate = Storyboard.model_validate(parsed.model_dump())
+                return candidate.model_copy(update={"style": style, "voice": voice})
         return fallback_storyboard(harvest, sources, style, voice, research=research)
 
     async def _generate_one_visual(self, prompt: str, references: list[Path], path: Path) -> bool:
@@ -458,7 +514,9 @@ Supplied sources: {evidence}
                         path.write_bytes(data)
                         return True
         except Exception:
-            return False
+            pass
+        if self.fallback is not None:
+            return await self.fallback.generate_svg(prompt, references[:4], path)
         return False
 
     async def generate_visuals(self, storyboard: Storyboard, harvest: HarvestResult | None, project_dir: Path) -> list[StudioAsset]:
