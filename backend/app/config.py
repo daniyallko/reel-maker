@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     )
 
     gemini_api_key: str | None = Field(default=None, validation_alias="GEMINI_API_KEY")
+    gemini_core_model: str = Field(default="gemini-3.8-flash", validation_alias="GEMINI_CORE_MODEL")
     openrouter_api_key: str | None = Field(default=None, validation_alias="OPENROUTER_API_KEY")
     groq_api_key: str | None = Field(default=None, validation_alias="GROQ_API_KEY")
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")

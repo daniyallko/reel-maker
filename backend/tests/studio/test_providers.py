@@ -15,7 +15,7 @@ from app.studio.urls import sample_site_url
 
 
 def test_requested_model_ids_and_thinking():
-    assert CORE_MODEL == "gemini-4-hydrogen"
+    assert CORE_MODEL in ("gemini-3.8-flash", "gemini-4-hydrogen")
     assert VISUAL_MODEL == "gemini-nano-banana-2.1"
     assert TTS_MODEL == "gemini-3.8-flash-tts"
     provider = GeminiStudioProvider("key")

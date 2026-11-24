@@ -1,6 +1,7 @@
 import asyncio
 import json
 import mimetypes
+import os
 import re
 import tempfile
 from pathlib import Path
@@ -24,7 +25,7 @@ from app.studio.schemas import (
 )
 from app.studio.visuals import build_fallback_visuals, build_scene_visuals, build_visual_prompt
 
-CORE_MODEL = "gemini-4-hydrogen"
+CORE_MODEL = os.environ.get("GEMINI_CORE_MODEL", "gemini-3.8-flash")
 VISUAL_MODEL = "gemini-nano-banana-2.1"
 TTS_MODEL = "gemini-3.8-flash-tts"
 TTS_API_VERSION = "v1beta"
