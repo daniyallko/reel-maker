@@ -1,7 +1,6 @@
 import math
+import subprocess
 from pathlib import Path
-
-import ffmpeg
 
 from app.studio.schemas import Storyboard, StudioAudio
 
@@ -48,20 +47,32 @@ def align_audio_timeline(
     audio_dir = project_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     aligned_paths: list[Path] = []
+    inputs: list[str] = []
+    filters: list[str] = []
+    concat_labels: list[str] = []
+    outputs: list[str] = []
     for index, (scene, source) in enumerate(zip(retimed.scenes, audio.segment_paths, strict=True)):
         target = scene.end - scene.start
         path = audio_dir / f"scene-{index:02d}-aligned.wav"
-        stream = ffmpeg.input(str(source)).audio.filter("aresample", 48000)
-        stream = stream.filter("apad").filter("atrim", duration=target)
-        ffmpeg.output(stream, str(path), ac=2, ar=48000).overwrite_output().run(
-            capture_stdout=True, capture_stderr=True
-        )
         aligned_paths.append(path)
+        inputs.extend(["-i", str(source)])
+        if len(retimed.scenes) == 1:
+            filters.append(f"[{index}:a]aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo,apad,atrim=duration={target},asplit=2[a{index}][all]")
+        else:
+            filters.append(f"[{index}:a]aresample=48000,aformat=sample_fmts=s16:channel_layouts=stereo,apad,atrim=duration={target},asplit=2[a{index}][c{index}]")
+            concat_labels.append(f"[c{index}]")
+        outputs.extend(["-map", f"[a{index}]", "-ac", "2", "-ar", "48000", str(path)])
 
     voice_path = audio.voice_path
     voice_path.parent.mkdir(parents=True, exist_ok=True)
-    streams = [ffmpeg.input(str(path)).audio for path in aligned_paths]
-    ffmpeg.concat(*streams, v=0, a=1).output(str(voice_path), ac=2, ar=48000).overwrite_output().run(
-        capture_stdout=True, capture_stderr=True
-    )
+    if len(retimed.scenes) > 1:
+        filters.append(f"{''.join(concat_labels)}concat=n={len(retimed.scenes)}:v=0:a=1[all]")
+    command = [
+        "ffmpeg", "-y",
+        *inputs,
+        "-filter_complex", ";".join(filters),
+        *outputs,
+        "-map", "[all]", "-ac", "2", "-ar", "48000", str(voice_path),
+    ]
+    subprocess.run(command, check=True, capture_output=True)
     return retimed, audio.model_copy(update={"voice_path": voice_path, "segment_paths": aligned_paths})

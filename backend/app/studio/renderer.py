@@ -32,8 +32,24 @@ def _ass_time_from_centiseconds(centiseconds: int) -> str:
     return f"{hours}:{minutes:02d}:{seconds:02d}.{centiseconds:02d}"
 
 
-def write_ass_captions(storyboard: Storyboard, durations: list[float], output: Path) -> Path:
+def is_light_color(hex_color: str) -> bool:
+    cleaned = hex_color.strip().lstrip("#")
+    if len(cleaned) != 6:
+        return False
+    try:
+        r, g, b = (int(cleaned[i:i + 2], 16) / 255 for i in (0, 2, 4))
+    except ValueError:
+        return False
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) > 0.58
+
+
+def write_ass_captions(storyboard: Storyboard, durations: list[float], output: Path, light_bg: bool = False) -> Path:
     output.parent.mkdir(parents=True, exist_ok=True)
+    style_line = (
+        "Style: Default,Liberation Sans Narrow,64,&H001C1B18,&H000000FF,&H00F4F1EA,&H80F4F1EA,-1,0,0,0,100,100,0,0,1,4,0,2,50,50,240,0"
+        if light_bg else
+        "Style: Default,Liberation Sans Narrow,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,50,50,240,0"
+    )
     lines = [
         "[Script Info]",
         "ScriptType: v4.00+",
@@ -41,7 +57,7 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
         "PlayResY: 1920",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Style: Default,Liberation Sans Narrow,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,50,50,240,0",
+        style_line,
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
@@ -75,7 +91,7 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
     return output
 
 
-def build_mix_command(project_dir: Path, storyboard: Storyboard, voice: Path, music: Path, captions: Path, output: Path) -> list[str]:
+def build_mix_command(project_dir: Path, storyboard: Storyboard, voice: Path, music: Path, captions: Path, output: Path, piped: bool = False) -> list[str]:
     frames = project_dir / "frames" / "frame-%06d.png"
     subtitle_path = str(captions).replace(":", "\\:").replace("'", "\\'")
     sfx_dir = Path(__file__).resolve().parents[2] / "assets" / "music" / "sfx"
@@ -109,9 +125,14 @@ def build_mix_command(project_dir: Path, storyboard: Storyboard, voice: Path, mu
         f"[0:v]subtitles='{subtitle_path}'[vout]",
     ])
     sfx_args = [argument for path in sfx_inputs for argument in ("-i", str(path))]
+    video_input = (
+        ["-f", "image2pipe", "-vcodec", "mjpeg", "-framerate", "30", "-i", "-"]
+        if piped else
+        ["-framerate", "30", "-i", str(frames)]
+    )
     return [
         "ffmpeg", "-y",
-        "-framerate", "30", "-i", str(frames),
+        *video_input,
         "-i", str(voice), "-i", str(music),
         *sfx_args,
         "-filter_complex_threads", "1", "-filter_complex", filter_graph,
@@ -174,16 +195,52 @@ async def render_directed_preview(html: str, storyboard: Storyboard, audio: Stud
     return destination
 
 
+async def stream_motion_to_ffmpeg(html: str, project_dir: Path, storyboard: Storyboard, command: list[str]) -> None:
+    process = await asyncio.create_subprocess_exec(
+        *command,
+        stdin=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    async with async_playwright() as playwright:
+        browser = await playwright.chromium.launch()
+        page = await browser.new_page(viewport={"width": 1080, "height": 1920})
+        server = await configure_offline_page(page, project_dir)
+        try:
+            await page.set_content(localize_motion_html(html, project_dir, server.base_url), wait_until="load")
+            total = frame_count(storyboard)
+            for index in range(total):
+                await page.evaluate(f"window.seekTo({index / 30})")
+                frame_bytes = await page.screenshot(type="jpeg", quality=92)
+                assert process.stdin is not None
+                process.stdin.write(frame_bytes)
+                if index % 15 == 14:
+                    await process.stdin.drain()
+            assert process.stdin is not None
+            await process.stdin.drain()
+            process.stdin.close()
+        finally:
+            await browser.close()
+            server.close()
+    _, stderr = await asyncio.wait_for(process.communicate(), timeout=600)
+    if process.returncode:
+        raise RuntimeError(stderr.decode("utf-8", errors="replace")[-5000:])
+
+
 class MotionRenderer:
-    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None, quality_mode: str = "strict", review_label: str | None = None) -> StudioOutput:
-        await capture_motion_frames(html, project_dir, storyboard)
-        write_ass_captions(storyboard, audio.durations, audio.captions_path)
+    async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None, quality_mode: str = "strict", review_label: str | None = None, light_bg: bool = False, piped: bool = False) -> StudioOutput:
+        write_ass_captions(storyboard, audio.durations, audio.captions_path, light_bg=light_bg)
         output_path = (output_dir or project_dir / "output") / "trailer.mp4"
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        command = build_mix_command(project_dir, storyboard, audio.voice_path, audio.music_path, audio.captions_path, output_path)
-        result = await asyncio.to_thread(subprocess.run, command, capture_output=True, text=True, timeout=600)
-        if result.returncode:
-            raise RuntimeError(result.stderr[-5000:])
+        if piped:
+            command = build_mix_command(project_dir, storyboard, audio.voice_path, audio.music_path, audio.captions_path, output_path, piped=True)
+            await stream_motion_to_ffmpeg(html, project_dir, storyboard, command)
+        else:
+            await capture_motion_frames(html, project_dir, storyboard)
+            command = build_mix_command(project_dir, storyboard, audio.voice_path, audio.music_path, audio.captions_path, output_path, piped=False)
+            result = await asyncio.to_thread(subprocess.run, command, capture_output=True, text=True, timeout=600)
+            if result.returncode:
+                raise RuntimeError(result.stderr[-5000:])
         thumbnail = next((asset for asset in assets if asset.kind == "thumbnail"), assets[-1])
         script = "\n\n".join(f"{scene.headline}\n{scene.narration}" for scene in storyboard.scenes)
         output = StudioOutput(

@@ -3,7 +3,9 @@ import json
 import httpx
 import pytest
 
-from app.studio.kimi_only import ask
+from app.studio.kimi_only import _unwrap_shot_body, ask, compose_film_html
+from app.studio.motion import sanitize_motion_html
+from app.studio.schemas import SourceCitation, Storyboard, StoryScene
 
 
 @pytest.mark.asyncio
@@ -35,3 +37,27 @@ async def test_kimi_auth_failure_is_terminal():
         with pytest.raises(RuntimeError, match="401"):
             await ask(client, "dummy", "test")
     assert seen == ["api.moonshot.ai"]
+
+
+def test_compose_film_html_and_unwrap_shot_body():
+    body_a = "function drawShot(ctx) {\n  ctx.fillStyle = P.accent;\n  ctx.fillRect(100, 400, 100, 100);\n}"
+    body_b = "ctx.fillStyle = P.ink;\nctx.fillRect(200, 500, 80, 80);"
+    assert _unwrap_shot_body(body_a).startswith("ctx.fillStyle = P.accent;")
+    board = Storyboard(
+        title="Test Film",
+        style="deep_dive",
+        voice="Fenrir",
+        duration=32,
+        speech_style="Conversational documentary",
+        scenes=[
+            StoryScene(id=f"shot-{i+1}", start=i*8, end=(i+1)*8, headline=f"Beat {i+1}", narration="One short line of narration.", visual_prompt="motion", source_refs=[0], layout="full_bleed")
+            for i in range(4)
+        ],
+        sources=[SourceCitation(url="inline://brief", title="Brief", claim="Test")],
+        directed_motion=True,
+    )
+    html = sanitize_motion_html(compose_film_html(board, {"palette": {"bg": "#101820", "accent": "#00d4ff"}}, [body_a, body_b, body_a, body_b]))
+    assert "window.seekTo" in html
+    assert "#101820" in html
+    assert "#00d4ff" in html
+    assert "drawShot_0" in html and "drawShot_3" in html

@@ -35,46 +35,53 @@ def _fit_tempo(stream, ratio: float):
     return stream.filter("atempo", max(1, remaining))
 
 
+async def _synthesize_scene(index: int, scene, storyboard: Storyboard, audio_dir: Path, tts_call, narration_voice: str | None, strict_voice: bool) -> tuple[Path, float, str | None]:
+    target = scene.end - scene.start
+    path = audio_dir / f"scene-{index:02d}.wav"
+    voice_label = None
+    try:
+        if tts_call is None:
+            raise RuntimeError("Offline narration")
+        payload = await tts_call(scene.narration, storyboard.voice, storyboard.speech_style)
+        if not payload:
+            raise RuntimeError("TTS returned no audio")
+        path.write_bytes(payload)
+        measured = media_duration(path)
+        if measured <= 0:
+            raise RuntimeError("TTS duration is zero")
+        if narration_voice:
+            voice_label = narration_voice
+    except Exception:
+        if strict_voice:
+            raise
+        voice_label = "Flite · offline preview"
+        AudioProducer._offline_voice(scene.narration, path, audio_dir / f"scene-{index:02d}.txt")
+        measured = media_duration(path)
+    if measured > target:
+        if storyboard.directed_motion and measured > target * 1.10:
+            raise NarrationOverrun(index, measured, target)
+        adjusted = audio_dir / f"scene-{index:02d}-fit.wav"
+        stream = ffmpeg.input(str(path)).audio
+        stream = _fit_tempo(stream, measured / target)
+        ffmpeg.output(stream, str(adjusted), ac=2, ar=48000).overwrite_output().run(
+            capture_stdout=True, capture_stderr=True
+        )
+        path = adjusted
+        measured = target
+    return path, measured, voice_label
+
+
 async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None, narration_voice=None, strict_voice=False) -> StudioAudio:
+    import asyncio
     audio_dir = project_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    segment_paths: list[Path] = []
-    durations: list[float] = []
-    voices = set()
-    for index, scene in enumerate(storyboard.scenes):
-        target = scene.end - scene.start
-        path = audio_dir / f"scene-{index:02d}.wav"
-        try:
-            if tts_call is None:
-                raise RuntimeError("Offline narration")
-            payload = await tts_call(scene.narration, storyboard.voice, storyboard.speech_style)
-            if not payload:
-                raise RuntimeError("TTS returned no audio")
-            path.write_bytes(payload)
-            measured = media_duration(path)
-            if measured <= 0:
-                raise RuntimeError("TTS duration is zero")
-            if narration_voice:
-                voices.add(narration_voice)
-        except Exception:
-            if strict_voice:
-                raise
-            voices.add("Flite · offline preview")
-            AudioProducer._offline_voice(scene.narration, path, audio_dir / f"scene-{index:02d}.txt")
-            measured = media_duration(path)
-        if measured > target:
-            if storyboard.directed_motion and measured > target * 1.10:
-                raise NarrationOverrun(index, measured, target)
-            adjusted = audio_dir / f"scene-{index:02d}-fit.wav"
-            stream = ffmpeg.input(str(path)).audio
-            stream = _fit_tempo(stream, measured / target)
-            ffmpeg.output(stream, str(adjusted), ac=2, ar=48000).overwrite_output().run(
-                capture_stdout=True, capture_stderr=True
-            )
-            path = adjusted
-            measured = target
-        segment_paths.append(path)
-        durations.append(measured)
+    results = await asyncio.gather(*(
+        _synthesize_scene(index, scene, storyboard, audio_dir, tts_call, narration_voice, strict_voice)
+        for index, scene in enumerate(storyboard.scenes)
+    ))
+    segment_paths = [item[0] for item in results]
+    durations = [item[1] for item in results]
+    voices = {item[2] for item in results if item[2]}
 
     voice_path = audio_dir / "narration.wav"
     if len(segment_paths) == 1:

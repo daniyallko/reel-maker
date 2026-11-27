@@ -189,7 +189,7 @@ class StudioJobManager:
                     raise ValueError("Kimi-only mode currently accepts a text brief.")
                 async def progress(stage, message, value):
                     await job.events.emit(stage, "running", message, value)
-                output = await make_film(self.settings, job.directory, bundle.dom_copy, progress, job.style, bundle.citations, job.quality_mode)
+                output = await make_film(self.settings, job.directory, bundle.dom_copy, progress, job.style, bundle.citations, job.quality_mode, job.voice)
             else:
                 provider = MockStudioProvider() if sample else GeminiStudioProvider(self.settings.gemini_api_key or "", settings=self.settings)
                 graph = build_studio_graph(

@@ -7,6 +7,7 @@ from app.studio.renderer import (
     SAMPLE_OUTPUT,
     build_mix_command,
     frame_count,
+    is_light_color,
     verify_studio_video,
     write_ass_captions,
 )
@@ -123,6 +124,17 @@ def test_video_qa_rejects_wrong_streams_and_duration(tmp_path: Path, monkeypatch
     assert "Expected 30fps video, received 24/1" in result.errors
     assert "Expected AAC audio, received mp3" in result.errors
     assert "Audio/video duration mismatch: 0.20s" in result.errors
+
+
+def test_adaptive_caption_style_switches_for_light_backgrounds(tmp_path: Path):
+    assert is_light_color("#f2efe7") is True
+    assert is_light_color("#0e1117") is False
+    measured = [1.2, 4.0, 5.0, 2.0]
+    storyboard = retime_storyboard(mock_storyboard("launch", "Fenrir"), measured)
+    light_ass = write_ass_captions(storyboard, measured, tmp_path / "light.ass", light_bg=True).read_text()
+    dark_ass = write_ass_captions(storyboard, measured, tmp_path / "dark.ass", light_bg=False).read_text()
+    assert "&H001C1B18" in light_ass
+    assert "&H00FFFFFF" in dark_ass
 
 
 def test_video_qa_rejects_silent_audio(tmp_path: Path, monkeypatch):

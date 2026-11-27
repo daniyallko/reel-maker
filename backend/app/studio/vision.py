@@ -99,7 +99,7 @@ def review_label_for(audit: VisionAudit | None, quality_mode: str) -> str | None
     return None
 
 
-async def capture_keyframes(html: str, project_dir: Path, times: list[float]) -> Path:
+async def capture_keyframes(html: str, project_dir: Path, times: list[float], validate_clock: bool = False) -> Path:
     audit_dir = project_dir / "audit"
     audit_dir.mkdir(parents=True, exist_ok=True)
     frames: list[Path] = []
@@ -108,11 +108,22 @@ async def capture_keyframes(html: str, project_dir: Path, times: list[float]) ->
         page = await browser.new_page(viewport={"width": 1080, "height": 1920})
         server = await configure_offline_page(page, project_dir)
         await page.set_content(localize_motion_html(html, project_dir, server.base_url), wait_until="load")
+        if validate_clock:
+            if not await page.evaluate("typeof window.seekTo === 'function'"):
+                await browser.close()
+                server.close()
+                raise ValueError("Motion HTML has no callable seekTo")
         for index, timestamp in enumerate(times):
             await page.evaluate(f"window.seekTo({timestamp})")
             path = audit_dir / f"frame-{index:02d}-{timestamp:.3f}.png"
             await page.screenshot(path=str(path))
             frames.append(path)
+        if validate_clock and times:
+            await page.evaluate(f"window.seekTo({times[0]})")
+            if Path(frames[0]).read_bytes() != await page.screenshot():
+                await browser.close()
+                server.close()
+                raise ValueError("Motion must reproduce the same frame when seeking backwards")
         await browser.close()
         server.close()
     contact = Image.new("RGB", (1080, ceil(len(times) / 3) * 640), "#05060a")
