@@ -8,6 +8,8 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent
 
 
 class Settings(BaseSettings):
+    kimi_only: bool = Field(default=False, validation_alias="STUDIO_KIMI_ONLY")
+    moonshot_api_key: str | None = Field(default=None, validation_alias="MOONSHOT_API_KEY")
     model_config = SettingsConfigDict(
         env_file=(BACKEND_DIR / ".env", ".env"),
         extra="ignore",
@@ -19,6 +21,7 @@ class Settings(BaseSettings):
     openrouter_api_key: str | None = Field(default=None, validation_alias="OPENROUTER_API_KEY")
     groq_api_key: str | None = Field(default=None, validation_alias="GROQ_API_KEY")
     anthropic_api_key: str | None = Field(default=None, validation_alias="ANTHROPIC_API_KEY")
+    director_model: str | None = Field(default=None, validation_alias="STUDIO_DIRECTOR_MODEL")
     vision_provider_order: str = Field(default="gemini,openrouter,groq,anthropic", validation_alias="VISION_PROVIDER_ORDER")
     openrouter_vision_model: str = Field(default="inclusionai/ling-3.2-flash:free", validation_alias="OPENROUTER_VISION_MODEL")
     groq_vision_model: str = Field(default="qwen/qwen3.8-27b", validation_alias="GROQ_VISION_MODEL")

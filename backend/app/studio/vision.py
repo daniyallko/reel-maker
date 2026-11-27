@@ -13,6 +13,27 @@ from app.studio.urls import configure_offline_page, localize_motion_html
 MAX_REVISIONS = 1
 
 
+def rendered_contact_sheet(video: Path, storyboard: Storyboard, project_dir: Path) -> Path:
+    import cv2
+    times = director_review_times(storyboard)
+    sheet = Image.new("RGB", (1080, ceil(len(times) / 3) * 640))
+    capture = cv2.VideoCapture(str(video))
+    try:
+        for index, timestamp in enumerate(times):
+            capture.set(cv2.CAP_PROP_POS_MSEC, timestamp * 1000)
+            ok, frame = capture.read()
+            if not ok:
+                raise ValueError(f"Could not decode review frame at {timestamp}s")
+            rgb = cv2.cvtColor(cv2.resize(frame, (360, 640)), cv2.COLOR_BGR2RGB)
+            sheet.paste(Image.fromarray(rgb), (index % 3 * 360, index // 3 * 640))
+    finally:
+        capture.release()
+    path = project_dir / "audit" / "contact-sheet.png"
+    path.parent.mkdir(exist_ok=True)
+    sheet.save(path)
+    return path
+
+
 class CriterionScore(BaseModel):
     criterion: str
     score: int

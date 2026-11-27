@@ -12,6 +12,8 @@ from PIL import Image, ImageDraw
 from pydantic import BaseModel, Field, model_validator
 
 Schema = TypeVar("Schema", bound=BaseModel)
+KIMI_MODEL = "kimi-k3.1-pro"
+KIMI_ENDPOINT = "https://api.moonshot.ai/v1/chat/completions"
 
 COLOR = r"^#[0-9a-fA-F]{6}$"
 
@@ -114,9 +116,12 @@ class OpenAIStudioFallback:
             }
             if response_format is not None:
                 payload["response_format"] = response_format
+            if name == "moonshot":
+                payload["reasoning_effort"] = "low"
             for attempt in (1, 2):
                 try:
-                    response = await self.client.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload)
+                    options = {"timeout": 240.0} if name == "moonshot" else {}
+                    response = await self.client.post(url, headers={"Authorization": f"Bearer {api_key}"}, json=payload, **options)
                     if response.status_code >= 400:
                         self.history.append(f"{name}/{model}: HTTP {response.status_code} - {self._error_detail(response)}")
                         if response.status_code == 429 and attempt == 1:
@@ -136,8 +141,8 @@ class OpenAIStudioFallback:
                         break
                     self.history.append(f"{name}/{model}: response accepted")
                     return content, name
-                except (httpx.HTTPError, KeyError, IndexError, TypeError, json.JSONDecodeError):
-                    self.history.append(f"{name}/{model}: request failed")
+                except (httpx.HTTPError, KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+                    self.history.append(f"{name}/{model}: request failed ({type(exc).__name__})")
                     break
         return None
 
@@ -157,6 +162,9 @@ class OpenAIStudioFallback:
                 if attempt == 1:
                     repair_prompt = f"{prompt}\nPrevious response failed schema validation: {error}\nReturn only corrected valid JSON."
         return None
+
+    async def generate_text(self, prompt: str):
+        return await self._request(prompt, [], max_tokens=14000)
 
     @staticmethod
     def _validated_svg(content: str) -> str:
@@ -260,3 +268,12 @@ explicit width="1080" height="1920" and matching viewBox.
         except (ET.ParseError, ValueError, OSError, RuntimeError) as error:
             self.history.append(f"{provider}: invalid or unrasterizable SVG - {error}; preview={content[:200]!r}")
             return await self._generate_vector_art(prompt, references, output)
+
+
+class MoonshotProvider(OpenAIStudioFallback):
+    def _providers(self):
+        yield "moonshot", KIMI_MODEL, self.settings.moonshot_api_key, KIMI_ENDPOINT
+
+    async def generate_json(self, prompt, schema, image_paths):
+        prompt += "\nReturn JSON matching this schema: " + json.dumps(schema.model_json_schema())
+        return await super().generate_json(prompt, schema, image_paths)

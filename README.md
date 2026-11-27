@@ -50,6 +50,12 @@ Provider failures have deterministic visual, audio, script, and motion fallbacks
 
 ## Studio API
 
+### Kimi-only text reels
+
+Set `STUDIO_KIMI_ONLY=true` and `MOONSHOT_API_KEY` in the backend environment. Install the backend's `kimi-local-voice` extra, then run `python -m piper.download_voices --data-dir data/localvoices en_US-lessac-high` from the backend directory. With a custom data directory, put the model in its `localvoices` subdirectory. Restart the backend and submit a text brief in the composer.
+
+In this mode Kimi writes the shot plan, generates deterministic Canvas animation and reviews the graphics. Piper records narration locally. Chromium and FFmpeg render the film. A failed model call ends the job or triggers a Kimi-only revision. The project directory holds the storyboard, motion source and visual review. Strict review also requires the final encoded contact sheet to pass.
+
 - `POST /api/studio/projects/inputs` — multipart `source`, `style`, `voice`, `quality_mode`, and optional `files`
 - `POST /api/studio/projects` — legacy JSON `{url, style, voice, quality_mode}`
 - `POST /api/studio/projects/sample` — instant offline demo

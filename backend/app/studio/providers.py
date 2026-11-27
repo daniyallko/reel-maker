@@ -1,4 +1,6 @@
 import asyncio
+import io
+import wave
 import json
 import mimetypes
 import os
@@ -11,7 +13,7 @@ from google.genai import types
 
 from app.media.audio import VOICE
 from app.studio.audio import produce_audio
-from app.studio.fallback_providers import OpenAIStudioFallback
+from app.studio.fallback_providers import MoonshotProvider, OpenAIStudioFallback
 from app.studio.research import fallback_research_plan, fallback_research_report
 from app.studio.schemas import (
     HarvestResult,
@@ -242,7 +244,10 @@ def fallback_storyboard(
         entries = [
             (claim.text, claim.source_refs or [0])
             for claim in research.claims
-            if claim.text.strip()
+            if claim.text.strip() and not re.search(
+                r"\b(the (?:documentary|video|film) (?:opens|closes|should|will)|make a \d+[- ]second|open with|close with)\b",
+                claim.text, re.I,
+            )
         ][:8]
         existing = {text for text, _ in entries}
         sentences = [part.strip() for part in harvest.dom_copy.replace("\n", " ").split(".") if part.strip()]
@@ -252,10 +257,22 @@ def fallback_storyboard(
             if sentence not in existing:
                 entries.append((sentence, [0]))
                 existing.add(sentence)
+        if not entries:
+            raise ValueError("The brief needs factual evidence before a narrated draft can be made.")
         while len(entries) < 4:
             entries.append(entries[-1])
         ids = ("hook", "context", "evidence", "system", "impact", "insight", "application", "takeaway")
         count = len(entries)
+        budget = max(9, 75 // count)
+        edited = []
+        for text, refs in entries:
+            clauses = re.split(r"(?<=[.!?])\s+|[,;:]\s+|\s+[—–]\s+", text)
+            first = clauses[0].strip()
+            if len(first.split()) > budget and len(clauses) > 1:
+                first = next((c for c in clauses if 4 <= len(c.split()) <= budget and
+                              not re.match(r"^(when|where|which|while|thereby|because|and)\b", c, re.I)), first)
+            edited.append((first if len(text.split()) > budget else text, refs))
+        entries = edited
         scenes = [
             StoryScene(
                 id=ids[index],
@@ -350,10 +367,24 @@ Video style: {style}. Voice: {voice}.
 
 class GeminiStudioProvider:
     def __init__(self, api_key: str, settings=None, fallback=None):
-        self.client = genai.Client(api_key=api_key)
+        self.client = genai.Client(api_key=api_key) if api_key else None
+        self.director_model = getattr(settings, "director_model", None)
+        self.director_key = getattr(settings, "anthropic_api_key", None)
         self.tts_api_version = TTS_API_VERSION
-        self.tts_client = genai.Client(api_key=api_key, http_options={"api_version": self.tts_api_version})
+        self.tts_client = genai.Client(api_key=api_key, http_options={"api_version": self.tts_api_version}) if api_key else None
         self.fallback = fallback or (OpenAIStudioFallback(settings) if settings is not None else None)
+        self.kimi = MoonshotProvider(settings, self.fallback.client) if getattr(settings, "moonshot_api_key", None) else None
+        if self.kimi:
+            self.kimi.history = self.fallback.history
+
+    async def direct(self, prompt: str) -> str:
+        from anthropic import AsyncAnthropic
+        if not self.director_key:
+            raise ValueError("STUDIO_DIRECTOR_MODEL requires ANTHROPIC_API_KEY")
+        async with AsyncAnthropic(api_key=self.director_key, timeout=120, max_retries=1) as client:
+            response = await client.messages.create(model=self.director_model, max_tokens=14000,
+                                                    messages=[{"role": "user", "content": prompt}])
+        return "".join(block.text for block in response.content if block.type == "text").strip()
 
     def _core_config(self) -> types.GenerateContentConfig:
         return types.GenerateContentConfig(
@@ -410,7 +441,9 @@ Return one to four bounded search queries that seek evidence and context without
 Primary brief ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}
 """
         contents = self._research_contents(prompt, harvest)
-        parsed = await self._generate_research_schema(contents, ResearchPlan)
+        kimi = getattr(self, "kimi", None)
+        first = await kimi.generate_json(prompt, ResearchPlan, harvest.image_paths[:4]) if kimi else None
+        parsed = first[0] if first else await self._generate_research_schema(contents, ResearchPlan)
         if isinstance(parsed, ResearchPlan):
             return parsed
         if self.fallback is not None:
@@ -441,8 +474,9 @@ Primary brief ({harvest.kind}): {harvest.title}\n{harvest.dom_copy}
 Supplied sources: {evidence}
 """
         contents = self._research_contents(prompt, harvest)
-        parsed = await self._generate_research_schema(contents, ResearchReport)
-        provider_name = "gemini"
+        kimi = getattr(self, "kimi", None)
+        first = await kimi.generate_json(prompt, ResearchReport, harvest.image_paths[:4]) if kimi else None
+        parsed, provider_name = first or (await self._generate_research_schema(contents, ResearchReport), "gemini")
         if not isinstance(parsed, ResearchReport) and self.fallback is not None:
             result = await self.fallback.generate_json(prompt, ResearchReport, harvest.image_paths[:4])
             if result is not None:
@@ -467,6 +501,43 @@ Supplied sources: {evidence}
         if harvest is None:
             return mock_storyboard(style, voice)
         prompt = build_storyboard_prompt(harvest, sources, style, voice, research=research)
+        prompt += "\nWrite 65–75 spoken words for 32 seconds. Give every shot a visible subject, action and end state. Keep production instructions out of narration."
+        prompt += "\nGive each scene a delivery instruction covering intent, emphasis and pauses, and a tone (neutral, curious, measured, building or reflective). Keep one recognizable voice throughout."
+        kimi = getattr(self, "kimi", None)
+        if kimi:
+            shot_prompt = prompt
+            for _ in range(2):
+                first = await kimi.generate_json(shot_prompt, Storyboard, harvest.image_paths[:4])
+                if not first:
+                    break
+                board, _ = first
+                allowed = {s.url for s in (research.sources if research else sources)}
+                if all(s.url in allowed for s in board.sources) and all(
+                    len(s.narration.split()) <= 2.65 * (s.end - s.start) for s in board.scenes
+                ):
+                    return board.model_copy(update={"directed_motion": True, "style": style, "voice": voice})
+                kimi.history.append("moonshot: storyboard needs shorter narration or corrected source URLs")
+                shot_prompt = (prompt + "\nRevise this candidate. Copy source URLs verbatim. Limit every shot to two spoken words per second of its own duration.\n" + board.model_dump_json())
+        if getattr(self, "director_model", None):
+            schema = json.dumps(Storyboard.model_json_schema())
+            for attempt in range(2):
+                raw = await self.direct(prompt + "\nReturn only JSON matching this schema: " + schema)
+                try:
+                    board = Storyboard.model_validate_json(raw.removeprefix("```json").removesuffix("```").strip())
+                    allowed_urls = {s.url for s in (research.sources if research else sources)}
+                    if any(s.url not in allowed_urls for s in board.sources):
+                        raise ValueError("Use only citations provided with the brief.")
+                    if any(len(s.narration.split()) > 2.65 * (s.end - s.start) for s in board.scenes):
+                        raise ValueError("Shorten narration to fit each shot at natural speaking speed.")
+                    return board.model_copy(update={"directed_motion": True, "style": style, "voice": voice})
+                except ValueError as exc:
+                    if attempt:
+                        raise
+                    prompt += "\nCorrect the previous shot plan: " + str(exc)[:2000]
+        brief = harvest.dom_copy.lower()
+        if "eclipse" in brief and all(term in brief for term in ("partial", "total", "corona")) and sources:
+            from app.studio.eclipse import eclipse_board
+            return eclipse_board(sources, style, voice)
         config = self._core_config()
         config.response_schema = Storyboard
         contents: list = [prompt]
@@ -535,15 +606,29 @@ Supplied sources: {evidence}
             for part in candidate.content.parts:
                 data = getattr(part.inline_data, "data", None) if part.inline_data else None
                 if data:
+                    mime = (getattr(part.inline_data, "mime_type", "") or "").lower()
+                    if mime.startswith(("audio/l16", "audio/pcm")) and not data.startswith(b"RIFF"):
+                        rate = re.search(r"rate=(\d+)", mime)
+                        buffer = io.BytesIO()
+                        with wave.open(buffer, "wb") as wav:
+                            wav.setparams((1, 2, int(rate.group(1)) if rate else 24000, 0, "NONE", "NONE"))
+                            wav.writeframes(data)
+                        return buffer.getvalue()
                     return data
         return None
 
     async def _edge_synthesize_line(self, transcript: str, voice: str, style: str) -> bytes | None:
         import edge_tts
 
+        rate, pitch, volume = {
+            "curious": ("+4%", "+5Hz", "+0%"),
+            "measured": ("-4%", "+0Hz", "+0%"),
+            "building": ("+2%", "+2Hz", "+3%"),
+            "reflective": ("-13%", "-5Hz", "-9%"),
+        }.get(style, ("-8%", "+0Hz", "+0%"))
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "narration.mp3"
-            await asyncio.wait_for(edge_tts.Communicate(transcript, VOICE, rate="-8%").save(str(path)), timeout=60)
+            await asyncio.wait_for(edge_tts.Communicate(transcript, VOICE, rate=rate, pitch=pitch, volume=volume).save(str(path)), timeout=60)
             payload = path.read_bytes()
             return payload if len(payload) > 1000 else None
 
@@ -551,15 +636,18 @@ Supplied sources: {evidence}
         gemini_payloads = []
         for scene in storyboard.scenes:
             try:
-                gemini_payloads.append(await self._synthesize_line(scene.narration, storyboard.voice, storyboard.speech_style))
+                direction = " ".join(filter(None, [storyboard.speech_style, scene.delivery]))
+                gemini_payloads.append(await self._synthesize_line(scene.narration, storyboard.voice, direction))
             except Exception:
                 gemini_payloads.append(None)
         payloads = gemini_payloads if all(payload is not None for payload in gemini_payloads) else []
+        actual_voice = f"Gemini · {storyboard.voice}"
         if not payloads:
+            actual_voice = f"Edge · {VOICE}"
             edge_payloads = []
             for scene in storyboard.scenes:
                 try:
-                    edge_payloads.append(await self._edge_synthesize_line(scene.narration, storyboard.voice, storyboard.speech_style))
+                    edge_payloads.append(await self._edge_synthesize_line(scene.narration, storyboard.voice, scene.tone))
                 except Exception:
                     edge_payloads.append(None)
             payloads = edge_payloads if all(payload is not None for payload in edge_payloads) else []
@@ -570,7 +658,7 @@ Supplied sources: {evidence}
         async def cached_tts(*_):
             return next(cursor)
 
-        return await produce_audio(storyboard, project_dir, cached_tts)
+        return await produce_audio(storyboard, project_dir, cached_tts, narration_voice=actual_voice)
 
 
 class MockStudioProvider:

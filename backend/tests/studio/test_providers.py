@@ -94,7 +94,8 @@ async def test_partial_gemini_tts_falls_back_to_one_consistent_edge_voice(tmp_pa
     async def edge_voice(transcript, voice, style):
         return b"edge"
 
-    async def fake_produce(storyboard, project_dir, tts_call=None):
+    async def fake_produce(storyboard, project_dir, tts_call=None, narration_voice=None):
+        assert narration_voice.startswith("Edge")
         assert tts_call is not None
         return [await tts_call(scene.narration, storyboard.voice, storyboard.speech_style) for scene in storyboard.scenes]
 

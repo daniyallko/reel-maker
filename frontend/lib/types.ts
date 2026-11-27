@@ -141,6 +141,7 @@ export interface StudioOutput {
   voice: string;
   quality_mode?: "strict" | "draft";
   review_label?: string | null;
+  narration_voice?: string | null;
   critique_scores?: Record<string, number>;
 }
 

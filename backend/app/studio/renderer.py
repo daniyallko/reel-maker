@@ -5,6 +5,7 @@ import asyncio
 import hashlib
 import math
 import re
+import tempfile
 
 from playwright.async_api import async_playwright
 
@@ -40,12 +41,14 @@ def write_ass_captions(storyboard: Storyboard, durations: list[float], output: P
         "PlayResY: 1920",
         "[V4+ Styles]",
         "Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding",
-        "Default,Liberation Sans Narrow,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,50,50,240,0",
+        "Style: Default,Liberation Sans Narrow,64,&H00FFFFFF,&H000000FF,&H00000000,&H80000000,-1,0,0,0,100,100,0,0,1,3,0,2,50,50,240,0",
         "[Events]",
         "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
     ]
     for index, scene in enumerate(storyboard.scenes):
         words = scene.narration.split()
+        if storyboard.directed_motion:
+            words = [" ".join(words[i:i + 4]) for i in range(0, len(words), 4)]
         total_characters = max(1, sum(max(1, len(word)) for word in words))
         cursor = scene.start
         scene_duration = max(0.0, durations[index]) if index < len(durations) else scene.end - scene.start
@@ -144,6 +147,33 @@ async def capture_motion_frames(html: str, project_dir: Path, storyboard: Storyb
     return frames_dir
 
 
+async def render_directed_preview(html: str, storyboard: Storyboard, audio: StudioAudio, project_dir: Path) -> Path:
+    destination = project_dir / "output" / "motion-preview.mp4"
+    destination.parent.mkdir(exist_ok=True)
+    write_ass_captions(storyboard, audio.durations, audio.captions_path)
+    with tempfile.TemporaryDirectory(dir=project_dir) as temporary:
+        frames = Path(temporary)
+        async with async_playwright() as playwright:
+            browser = await playwright.chromium.launch()
+            page = await browser.new_page(viewport={"width": 1080, "height": 1920}, device_scale_factor=1/3)
+            server = await configure_offline_page(page, project_dir)
+            try:
+                await page.set_content(localize_motion_html(html, project_dir, server.base_url), wait_until="load")
+                for i in range(math.ceil(storyboard.duration * 6)):
+                    await page.evaluate("t => window.seekTo(t)", i / 6)
+                    await page.screenshot(path=frames / f"{i:04}.jpg", type="jpeg", quality=70)
+            finally:
+                await browser.close()
+                server.close()
+        command = ["ffmpeg", "-y", "-framerate", "6", "-i", str(frames / "%04d.jpg"),
+                   "-i", str(audio.voice_path), "-vf", f"subtitles={audio.captions_path.name}",
+                   "-c:v", "libx264", "-threads", "2", "-pix_fmt", "yuv420p", "-c:a", "aac",
+                   "-movflags", "+faststart", str(destination)]
+        await asyncio.to_thread(subprocess.run, command, cwd=audio.captions_path.parent, check=True,
+                                capture_output=True, timeout=120)
+    return destination
+
+
 class MotionRenderer:
     async def render(self, html: str, storyboard: Storyboard, assets: list[StudioAsset], audio: StudioAudio, project_dir: Path, output_dir: Path | None = None, source_url: str | None = None, critique_scores: dict[str, int] | None = None, quality_mode: str = "strict", review_label: str | None = None) -> StudioOutput:
         await capture_motion_frames(html, project_dir, storyboard)
@@ -157,6 +187,7 @@ class MotionRenderer:
         thumbnail = next((asset for asset in assets if asset.kind == "thumbnail"), assets[-1])
         script = "\n\n".join(f"{scene.headline}\n{scene.narration}" for scene in storyboard.scenes)
         output = StudioOutput(
+            narration_voice=audio.narration_voice,
             title=storyboard.title,
             trailer_url=f"/media/{project_dir.name}/{output_path.relative_to(project_dir)}",
             thumbnail_url=thumbnail.url,
@@ -173,7 +204,11 @@ class MotionRenderer:
             review_label=review_label,
             critique_scores=critique_scores or {},
         )
-        (output_path.parent / "studio-output.json").write_text(output.model_dump_json(indent=2), encoding="utf-8")
+        if storyboard.directed_motion:
+            from app.studio.vision import rendered_contact_sheet
+            await asyncio.to_thread(rendered_contact_sheet, output_path, storyboard, project_dir)
+        if not storyboard.directed_motion or output_dir is not None:
+            (output_path.parent / "studio-output.json").write_text(output.model_dump_json(indent=2), encoding="utf-8")
         return output
 
 

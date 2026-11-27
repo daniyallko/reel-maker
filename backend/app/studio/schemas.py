@@ -75,6 +75,8 @@ class SceneMetric(BaseModel):
 
 
 class StoryScene(BaseModel):
+    tone: Literal["neutral", "curious", "measured", "building", "reflective"] = "neutral"
+    delivery: str = ""
     id: str
     start: float
     end: float
@@ -108,6 +110,7 @@ class StoryScene(BaseModel):
 
 
 class Storyboard(BaseModel):
+    directed_motion: bool = False
     title: str
     style: str
     voice: str
@@ -137,6 +140,7 @@ class Storyboard(BaseModel):
 
 
 class StudioAudio(BaseModel):
+    narration_voice: str | None = None
     voice_path: Path = Field(exclude=True)
     music_path: Path = Field(exclude=True)
     captions_path: Path = Field(exclude=True)
@@ -146,6 +150,7 @@ class StudioAudio(BaseModel):
 
 
 class StudioOutput(BaseModel):
+    narration_voice: str | None = None
     title: str
     trailer_url: str
     thumbnail_url: str

@@ -53,6 +53,7 @@ export function StudioPremiere({ output, sourceUrl }: { output: StudioOutput; so
           <span>{output.bpm} BPM</span>
           <span>1080 × 1920 / 30 fps</span>
           {output.review_label && <span className="rounded-md border border-white/20 px-2 py-1 text-white/70" role="note">{output.review_label}</span>}
+          {output.narration_voice && <span>Narration · {output.narration_voice}</span>}
         </div>
 
         <div className="premiere-layout">

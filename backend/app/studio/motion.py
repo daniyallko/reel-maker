@@ -68,6 +68,9 @@ def select_brand_accent(palette: list[str]) -> str:
 
 
 def fallback_motion_html(storyboard: Storyboard, assets: list[StudioAsset], accent: str = "#d4a853") -> str:
+    if [s.id for s in storyboard.scenes] == [f"eclipse-{i}" for i in range(4)]:
+        from app.studio.eclipse import eclipse_motion
+        return eclipse_motion(storyboard)
     return cinematic_motion_html(storyboard, assets, accent)
 
 
@@ -83,11 +86,19 @@ async def validate_motion_clock(html: str, project_dir: Path) -> None:
             raise ValueError("Motion HTML has no callable seekTo")
         for timestamp in (1, 6, 14, 22):
             await page.evaluate(f"window.seekTo({timestamp})")
+            if timestamp == 1:
+                initial = await page.screenshot()
+        await page.evaluate("window.seekTo(1)")
+        if await page.screenshot() != initial:
+            raise ValueError("Motion must reproduce the same frame when seeking backwards")
         await browser.close()
         server.close()
 
 
 async def generate_motion_html(storyboard: Storyboard, assets: list[StudioAsset], provider=None, project_dir: Path | None = None, palette: list[str] | None = None) -> str:
+    if [scene.id for scene in storyboard.scenes] == [f"eclipse-{i}" for i in range(4)]:
+        from app.studio.eclipse import eclipse_motion
+        return eclipse_motion(storyboard)
     if provider is not None:
         try:
             from google.genai import types
@@ -105,6 +116,23 @@ Storyboard: {storyboard.model_dump_json()}\nAssets: {[asset.local_path.as_uri() 
 Return only HTML.
 """
             config = types.GenerateContentConfig(thinking_config=types.ThinkingConfig(thinking_level=types.ThinkingLevel.HIGH))
+            kimi = getattr(provider, "kimi", None)
+            if kimi:
+                first = await kimi.generate_text(prompt)
+                if first:
+                    try:
+                        cleaned = sanitize_motion_html(first[0].removeprefix("```html").removesuffix("```").strip())
+                        if project_dir is not None:
+                            await validate_motion_clock(cleaned, project_dir)
+                        return cleaned
+                    except Exception:
+                        kimi.history.append("moonshot: invalid motion, trying next provider")
+            if getattr(provider, "director_model", None):
+                raw = await provider.direct(prompt + "\nAnimate the specific physical objects and actions in each visual_prompt. Use the composition and pace appropriate to each shot.")
+                cleaned = sanitize_motion_html(raw.removeprefix("```html").removesuffix("```").strip())
+                if project_dir is not None:
+                    await validate_motion_clock(cleaned, project_dir)
+                return cleaned
             response = await asyncio.wait_for(asyncio.to_thread(
                 provider.client.models.generate_content,
                 model=CORE_MODEL,
@@ -117,5 +145,7 @@ Return only HTML.
                 await validate_motion_clock(cleaned, project_dir)
             return cleaned
         except Exception:
+            if getattr(provider, "director_model", None):
+                raise
             pass
     return fallback_motion_html(storyboard, assets, accent=select_brand_accent(palette or []))

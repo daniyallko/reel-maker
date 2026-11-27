@@ -10,6 +10,7 @@ from app.studio.vision_providers import (
     OpenAICompatibleVisionProvider,
     RetryableProviderError,
     VisionProviderRouter,
+    audit_prompt,
     build_vision_router,
 )
 
@@ -135,7 +136,7 @@ async def test_openai_compatible_provider_sends_model_image_and_schema(tmp_path:
     result = await provider.audit(contact, "html")
     assert result.passed is True
     assert captured["body"]["model"] == "qwen/qwen3.8-27b"
-    assert captured["body"]["messages"][0]["content"][0]["text"] == AUDIT_PROMPT
+    assert captured["body"]["messages"][0]["content"][0]["text"] == audit_prompt("html")
     assert captured["body"]["messages"][0]["content"][1]["image_url"]["url"].startswith("data:image/png;base64,")
     assert captured["body"]["response_format"]["type"] == "json_object"
     await provider.client.aclose()
@@ -145,6 +146,8 @@ def test_router_only_builds_configured_providers():
     from app.config import Settings
 
     settings = Settings(
+        _env_file=None,
+        moonshot_api_key=None,
         gemini_api_key=None,
         openrouter_api_key="openrouter",
         groq_api_key="groq",

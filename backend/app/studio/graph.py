@@ -5,10 +5,11 @@ from typing import Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 
 from app.events import EventBus
+from app.studio.audio import NarrationOverrun
 from app.studio.harvest import harvest
 from app.studio.motion import fallback_motion_html, generate_motion_html, select_brand_accent
 from app.studio.research import fallback_research_plan, fallback_research_report, research_queries
-from app.studio.renderer import MotionRenderer, verify_studio_video
+from app.studio.renderer import MotionRenderer, render_directed_preview, verify_studio_video
 from app.studio.schemas import HarvestResult, ResearchReport, SourceCitation, Storyboard, StudioAsset, StudioAudio, StudioOutput
 from app.studio.timeline import align_audio_timeline
 from app.studio.vision import MAX_REVISIONS, capture_keyframes, director_review_times, require_passing_audit, require_unaudited_allowed, review_label_for, should_use_unaudited_fallback
@@ -156,8 +157,29 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def audio(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("voice_studio", "running", "Synthesizing and measuring narration segments…", 50)
-        audio = await provider.synthesize(state["storyboard"], state["project_dir"])
-        return {"audio": audio}
+        board = state["storyboard"]
+        revised = set()
+        while True:
+            try:
+                audio = await provider.synthesize(board, state["project_dir"])
+                return {"audio": audio, "storyboard": board}
+            except NarrationOverrun as error:
+                kimi = getattr(provider, "kimi", None)
+                if not (kimi or getattr(provider, "director_model", None)) or error.index in revised:
+                    raise
+                revised.add(error.index)
+                scene = board.scenes[error.index]
+                limit = max(1, int(len(scene.narration.split()) / error.ratio * .93))
+                prompt = f"Rewrite this spoken line in at most {limit} words, preserving its meaning. Return only the line.\n{scene.narration}"
+                first = await kimi.generate_text(prompt) if kimi else None
+                if not first and not getattr(provider, "director_model", None):
+                    raise
+                line = (first[0] if first else await provider.direct(prompt)).strip()
+                if not line or len(line.split()) > limit:
+                    raise ValueError("Director could not fit the narration into the shot.")
+                scenes = list(board.scenes)
+                scenes[error.index] = scene.model_copy(update={"narration": line})
+                board = board.model_copy(update={"scenes": scenes})
 
     async def timing(state: StudioState) -> dict[str, Any]:
         storyboard, audio = align_audio_timeline(state["storyboard"], state["audio"], state["project_dir"])
@@ -173,7 +195,9 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def motion(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("motion_coder", "running", "Programming deterministic motion scenes…", 66)
+        history_start = len(getattr(getattr(provider, "fallback", None), "history", []))
         html = await generate_motion_html(state["storyboard"], state["visuals"], None if sample else provider, state["project_dir"], palette=state["harvest"].palette)
+        await emit_fallback_history(events, "motion_coder", provider, history_start, 71)
         await events.emit("motion_coder", "complete", "Every frame is locked to seekTo(t).", 72)
         return {"html": html}
 
@@ -227,6 +251,14 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
 
     async def render(state: StudioState) -> dict[str, Any]:
         events = state["events"]
+        if state["storyboard"].directed_motion:
+            directory = state["project_dir"]
+            (directory / "storyboard.json").write_text(state["storyboard"].model_dump_json(indent=2), encoding="utf-8")
+            (directory / "motion.txt").write_text(state["html"], encoding="utf-8")
+            preview = await render_directed_preview(state["html"], state["storyboard"], state["audio"], directory)
+            asset = StudioAsset(id="motion-preview", kind="video", label="Motion preview", mime_type="video/mp4",
+                                url=f"/media/{directory.name}/output/{preview.name}", local_path=preview)
+            await events.emit("renderer", "running", "Motion preview ready.", 88, assets=[asset])
         await events.emit("renderer", "running", "Capturing 30fps motion frames and mixing audio…", 90)
         output = await renderer.render(state["html"], state["storyboard"], state["visuals"], state["audio"], state["project_dir"], source_url=state["source_url"], critique_scores=state.get("critique_scores", {}), quality_mode=state.get("quality_mode", "strict"), review_label=state.get("review_label"))
         await events.emit("renderer", "complete", "Final motion reel exported.", 96)
@@ -235,9 +267,28 @@ def build_studio_graph(provider, renderer: MotionRenderer, vision_director=None,
     async def qa(state: StudioState) -> dict[str, Any]:
         events = state["events"]
         await events.emit("qa_critic", "running", "Checking duration, frames, and audio…", 98)
-        result = verify_studio_video(state["project_dir"] / "output" / "trailer.mp4")
+        result = await asyncio.to_thread(verify_studio_video, state["project_dir"] / "output" / "trailer.mp4")
         if not result.valid:
             raise RuntimeError("; ".join(result.errors))
+        if state["storyboard"].directed_motion:
+            mode = state.get("quality_mode", "strict")
+            audit = None
+            if vision_director is not None:
+                audit = await vision_director.safe_audit(state["project_dir"] / "audit" / "contact-sheet.png", state["storyboard"].model_dump_json())
+            if mode == "strict":
+                if audit is None:
+                    require_unaudited_allowed(mode)
+                require_passing_audit(audit, mode)
+            output = state["output"].model_copy(update={
+                "critique_scores": {s.criterion: s.score for s in audit.scores} if audit else {},
+                "review_label": review_label_for(audit, mode),
+            })
+            path = state["project_dir"] / "output" / "studio-output.json"
+            pending = path.with_suffix(".tmp")
+            pending.write_text(output.model_dump_json(indent=2), encoding="utf-8")
+            pending.replace(path)
+            await events.emit("qa_critic", "complete", "Final export checked.", 100)
+            return {"output": output}
         await events.emit("qa_critic", "complete", "Projection approved.", 100)
         return {}
 

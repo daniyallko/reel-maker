@@ -20,6 +20,13 @@ Return only valid JSON.
 """
 
 
+def audit_prompt(context: str) -> str:
+    schema = "\nReturn an object matching this JSON schema: " + json.dumps(VisionAudit.model_json_schema())
+    if context.startswith("{"):
+        return AUDIT_PROMPT + schema + "\nCompare these final encoded frames with the intended shot actions. Penalize missing visual subjects and unreadable captions. Shot plan:\n" + context
+    return AUDIT_PROMPT + schema
+
+
 class ProviderError(RuntimeError):
     pass
 
@@ -68,7 +75,7 @@ class GeminiVisionProvider:
             response = await asyncio.to_thread(
                 self.client.models.generate_content,
                 model=self.model,
-                contents=[AUDIT_PROMPT, types.Part.from_bytes(data=contact_sheet.read_bytes(), mime_type="image/png")],
+                contents=[audit_prompt(html), types.Part.from_bytes(data=contact_sheet.read_bytes(), mime_type="image/png")],
                 config=types.GenerateContentConfig(
                     response_mime_type="application/json",
                     response_schema=VisionAudit,
@@ -104,12 +111,13 @@ class OpenAICompatibleVisionProvider:
                     "messages": [{
                         "role": "user",
                         "content": [
-                            {"type": "text", "text": AUDIT_PROMPT},
+                            {"type": "text", "text": audit_prompt(html)},
                             {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{image}"}},
                         ],
                     }],
                     "response_format": response_format,
-                    "max_tokens": 2000,
+                    "max_tokens": 8000 if self.name == "moonshot" else 2000,
+                    **({"reasoning_effort": "low"} if self.name == "moonshot" else {}),
                 },
             )
             if response.status_code >= 400:
@@ -154,7 +162,7 @@ class AnthropicVisionProvider:
                                 "data": base64.b64encode(contact_sheet.read_bytes()).decode("ascii"),
                             },
                         },
-                        {"type": "text", "text": AUDIT_PROMPT},
+                        {"type": "text", "text": audit_prompt(html)},
                     ],
                 }],
             )
@@ -200,6 +208,9 @@ def build_vision_router(settings, gemini_client) -> VisionProviderRouter:
     from app.studio.providers import CORE_MODEL, FALLBACK_MODEL
 
     providers: list[VisionProvider] = []
+    if getattr(settings, "moonshot_api_key", None):
+        from app.studio.fallback_providers import KIMI_ENDPOINT, KIMI_MODEL
+        providers.append(OpenAICompatibleVisionProvider("moonshot", KIMI_MODEL, settings.moonshot_api_key, KIMI_ENDPOINT))
     for name in settings.vision_provider_order.split(","):
         name = name.strip().lower()
         if name == "gemini" and settings.gemini_api_key:

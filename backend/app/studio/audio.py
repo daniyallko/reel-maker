@@ -20,6 +20,13 @@ def music_for_style(style: str) -> Path:
     return MUSIC_DIR / MUSIC_BY_STYLE[style]
 
 
+class NarrationOverrun(ValueError):
+    def __init__(self, index, measured, target):
+        self.index = index
+        self.ratio = measured / target
+        super().__init__(f"Narration for shot {index + 1} lasts {measured:.1f}s in a {target:.1f}s slot.")
+
+
 def _fit_tempo(stream, ratio: float):
     remaining = ratio
     while remaining > 2:
@@ -28,11 +35,12 @@ def _fit_tempo(stream, ratio: float):
     return stream.filter("atempo", max(1, remaining))
 
 
-async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None) -> StudioAudio:
+async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None, narration_voice=None, strict_voice=False) -> StudioAudio:
     audio_dir = project_dir / "audio"
     audio_dir.mkdir(parents=True, exist_ok=True)
     segment_paths: list[Path] = []
     durations: list[float] = []
+    voices = set()
     for index, scene in enumerate(storyboard.scenes):
         target = scene.end - scene.start
         path = audio_dir / f"scene-{index:02d}.wav"
@@ -46,10 +54,17 @@ async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None
             measured = media_duration(path)
             if measured <= 0:
                 raise RuntimeError("TTS duration is zero")
+            if narration_voice:
+                voices.add(narration_voice)
         except Exception:
+            if strict_voice:
+                raise
+            voices.add("Flite · offline preview")
             AudioProducer._offline_voice(scene.narration, path, audio_dir / f"scene-{index:02d}.txt")
             measured = media_duration(path)
         if measured > target:
+            if storyboard.directed_motion and measured > target * 1.10:
+                raise NarrationOverrun(index, measured, target)
             adjusted = audio_dir / f"scene-{index:02d}-fit.wav"
             stream = ffmpeg.input(str(path)).audio
             stream = _fit_tempo(stream, measured / target)
@@ -72,6 +87,7 @@ async def produce_audio(storyboard: Storyboard, project_dir: Path, tts_call=None
             capture_stdout=True, capture_stderr=True
         )
     return StudioAudio(
+        narration_voice=" / ".join(sorted(voices)) or None,
         voice_path=voice_path,
         music_path=music_for_style(storyboard.style),
         captions_path=audio_dir / "captions.ass",

@@ -182,6 +182,14 @@ class StudioJobManager:
         try:
             if sample and (SAMPLE_OUTPUT / "sample.json").exists():
                 output = await self._replay_sample(job)
+            elif self.settings.kimi_only and not sample:
+                from app.studio.kimi_only import make_film
+                bundle = job.source_bundle
+                if not bundle or not bundle.dom_copy or bundle.kind != "text":
+                    raise ValueError("Kimi-only mode currently accepts a text brief.")
+                async def progress(stage, message, value):
+                    await job.events.emit(stage, "running", message, value)
+                output = await make_film(self.settings, job.directory, bundle.dom_copy, progress, job.style, bundle.citations, job.quality_mode)
             else:
                 provider = MockStudioProvider() if sample else GeminiStudioProvider(self.settings.gemini_api_key or "", settings=self.settings)
                 graph = build_studio_graph(
@@ -206,9 +214,10 @@ class StudioJobManager:
             job.status = ProjectStatus.COMPLETE
             await job.events.emit("premiere", "complete", "Your motion reel is ready.", 100, payload={"output": output.model_dump()})
         except Exception as error:
+            message = str(error) or type(error).__name__
             job.status = ProjectStatus.FAILED
-            job.error = str(error)
-            await job.events.emit("pipeline", "failed", str(error), 100)
+            job.error = message
+            await job.events.emit("pipeline", "failed", message, 100)
         finally:
             await job.events.close()
 
